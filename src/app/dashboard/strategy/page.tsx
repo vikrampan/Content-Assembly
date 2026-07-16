@@ -1,13 +1,11 @@
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { hasAnthropic } from "@/lib/ai/strategist";
 import type { AiPersona, Workspace } from "@/lib/types";
 import { StrategyDesk } from "./StrategyDesk";
 
 export default async function StrategyPage() {
-  const session = await requireSession();
-  if (session.role === "client") redirect("/dashboard");
+  const session = await requireAccess("strategy");
 
   const supabase = await createClient();
   const [{ data }, { data: personas }] = await Promise.all([

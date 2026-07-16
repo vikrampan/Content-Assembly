@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { requireDeskAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getDepartment, DEPARTMENT_LABELS } from "@/lib/mendly/departments";
 import { STATUS_LABELS } from "@/lib/pipeline";
@@ -21,12 +21,10 @@ export default async function DeskPage({
 }: {
   params: Promise<{ dept: string }>;
 }) {
-  const session = await requireSession();
-  if (session.role === "client") redirect("/dashboard");
-
   const { dept } = await params;
   const d = getDepartment(dept);
   if (!d) notFound();
+  await requireDeskAccess(dept); // only this desk's function (or admin)
 
   const supabase = await createClient();
 

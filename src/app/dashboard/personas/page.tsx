@@ -1,12 +1,10 @@
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { AiPersona, Workspace } from "@/lib/types";
 import { PersonaManager } from "./PersonaManager";
 
 export default async function PersonasPage() {
-  const session = await requireSession();
-  if (session.role === "client") redirect("/dashboard");
+  const session = await requireAccess("personas");
 
   const supabase = await createClient();
   const [{ data: ws }, { data: personas }] = await Promise.all([

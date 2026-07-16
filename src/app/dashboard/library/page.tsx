@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Asset, Workspace } from "@/lib/types";
 import { MediaLibrary, type AssetView } from "./MediaLibrary";
@@ -11,8 +10,7 @@ const basename = (p: string) => {
 };
 
 export default async function LibraryPage() {
-  const session = await requireSession();
-  if (session.role === "client") redirect("/dashboard");
+  const session = await requireAccess("library");
 
   const supabase = await createClient();
   const [{ data: ws }, { data: assetRows }] = await Promise.all([

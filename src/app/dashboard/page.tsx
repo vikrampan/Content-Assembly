@@ -1,9 +1,7 @@
-import Link from "next/link";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { columnsForRole } from "@/lib/pipeline";
-import { getDepartment } from "@/lib/mendly/departments";
 import type { ContentItem, ContentStatus, Workspace } from "@/lib/types";
 
 function Metric({ label, value }: { label: string; value: number | string }) {
@@ -18,7 +16,7 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 }
 
 export default async function DashboardPage() {
-  const session = await requireSession();
+  const session = await requireAccess("board");
   const supabase = await createClient();
 
   // RLS scopes every one of these queries automatically. A client literally
@@ -58,27 +56,12 @@ export default async function DashboardPage() {
   };
   const header = headers[session.role];
 
-  // The signed-in team member's desk (from their first membership with one).
-  const myDeptKey = session.memberships.map((m) => m.department).find(Boolean) ?? null;
-  const myDesk = getDepartment(myDeptKey);
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-lg font-semibold">{header.title}</h1>
         <p className="text-sm opacity-60">{header.subtitle}</p>
       </div>
-
-      {myDesk ? (
-        <Link
-          href={`/dashboard/desk/${myDesk.key}`}
-          className="flex items-center gap-3 rounded-2xl border border-amber-500 bg-amber-500/10 px-4 py-3 text-sm transition hover:bg-amber-500/20"
-        >
-          <span className="font-medium">Go to your desk — {myDesk.label}</span>
-          <span className="opacity-70">{myDesk.blurb}</span>
-          <span className="ml-auto text-amber-700 dark:text-amber-400">→</span>
-        </Link>
-      ) : null}
 
       {/* Metrics vary by role. */}
       {session.role === "admin" ? (

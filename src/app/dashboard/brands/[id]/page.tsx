@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Workspace } from "@/lib/types";
 import { BrandBookForm } from "./BrandBookForm";
@@ -10,8 +10,7 @@ export default async function BrandEditorPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireSession();
-  if (session.role !== "admin") redirect("/dashboard");
+  const session = await requireAccess("brands");
 
   const { id } = await params;
   const supabase = await createClient();

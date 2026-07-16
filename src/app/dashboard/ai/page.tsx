@@ -1,13 +1,11 @@
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { monthStartISO } from "@/lib/ai/usage";
 import type { Profile } from "@/lib/types";
 import { AIManagement, type IntegrationView, type MemberRow, type UsageByPurpose } from "./AIManagement";
 
 export default async function AIPage() {
-  const session = await requireSession();
-  if (session.role !== "admin") redirect("/dashboard");
+  const session = await requireAccess("ai");
 
   const supabase = await createClient();
   const monthStart = monthStartISO();

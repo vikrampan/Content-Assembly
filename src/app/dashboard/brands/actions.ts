@@ -3,12 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { userFunction } from "@/lib/mendly/access";
 
 export type ActionResult = { ok: true; id?: string } | { error: string };
 
+// Admin creates brands; the Brand Designer (and admin) edit brand books.
 async function requireAdmin() {
   const session = await requireSession();
   if (session.role !== "admin") throw new Error("Forbidden: admin only");
+  return session;
+}
+
+async function requireBrandEditor() {
+  const session = await requireSession();
+  const fn = userFunction(session.profile);
+  if (fn !== "admin" && fn !== "brand") throw new Error("Forbidden: brand designer or admin only");
   return session;
 }
 
@@ -70,7 +79,7 @@ const HEX_RE = /^[0-9a-fA-F]{6}$/;
 
 /** Lock / update a brand's Brand DNA (the constitution every desk reads). */
 export async function updateBrandBook(input: BrandBookInput): Promise<ActionResult> {
-  await requireAdmin();
+  await requireBrandEditor();
 
   const name = input.name.trim();
   if (!name) return { error: "Brand name is required." };

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Workspace } from "@/lib/types";
 import { CreateBrandForm } from "./CreateBrandForm";
@@ -16,8 +15,7 @@ function dnaScore(w: Workspace): { filled: number; total: number } {
 }
 
 export default async function BrandsPage() {
-  const session = await requireSession();
-  if (session.role !== "admin") redirect("/dashboard");
+  const session = await requireAccess("brands");
 
   const supabase = await createClient();
   const { data } = await supabase.from("workspaces").select("*").order("name");

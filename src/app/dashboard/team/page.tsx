@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient, hasServiceRole } from "@/lib/supabase/admin";
 import { RoleBadge } from "@/components/RoleBadge";
@@ -7,8 +6,7 @@ import type { AccountType, Membership, Profile, Workspace } from "@/lib/types";
 import { CreateUserForm } from "./CreateUserForm";
 
 export default async function TeamPage() {
-  const session = await requireSession();
-  if (session.role !== "admin") redirect("/dashboard");
+  const session = await requireAccess("team");
 
   const supabase = await createClient();
   const { data: workspacesRaw } = await supabase

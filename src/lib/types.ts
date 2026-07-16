@@ -23,6 +23,7 @@ export interface Profile {
   id: string;
   full_name: string | null;
   account_type: AccountType;
+  department: string | null;
   created_at: string;
 }
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABELS } from "@/lib/pipeline";
 import { OBJECTIVE_LABELS, type Objective } from "@/lib/mendly/strategy";
@@ -23,9 +23,7 @@ export default async function ContentDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireSession();
-  // The board is the client surface; the detail/QA view is for the team.
-  if (session.role === "client") redirect("/dashboard");
+  const session = await requireAccess("content_detail");
 
   const { id } = await params;
   const supabase = await createClient();

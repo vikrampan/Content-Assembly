@@ -1,12 +1,10 @@
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { ContentItem, Workspace } from "@/lib/types";
 import { Calendar } from "./Calendar";
 
 export default async function CalendarPage() {
-  const session = await requireSession();
-  if (session.role === "client") redirect("/dashboard");
+  const session = await requireAccess("calendar");
 
   const supabase = await createClient();
   const [{ data: ws }, { data: items }] = await Promise.all([

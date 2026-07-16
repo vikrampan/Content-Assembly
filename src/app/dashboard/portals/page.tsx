@@ -1,13 +1,11 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { DEPARTMENTS } from "@/lib/mendly/departments";
 import type { ContentItem } from "@/lib/types";
 
 export default async function PortalsPage() {
-  const session = await requireSession();
-  if (session.role === "client") redirect("/dashboard");
+  const session = await requireAccess("portals");
 
   const supabase = await createClient();
   const { data } = await supabase.from("content_items").select("status");
