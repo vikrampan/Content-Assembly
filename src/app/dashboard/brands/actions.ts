@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, hasServiceRole } from "@/lib/supabase/admin";
 import { userFunction } from "@/lib/mendly/access";
 
 export type ActionResult = { ok: true; id?: string } | { error: string };
@@ -30,30 +31,72 @@ function slugify(s: string): string {
     .slice(0, 60);
 }
 
-/** Create a new brand (workspace). Brand DNA is filled in on the editor after. */
+/**
+ * Onboard a brand: create the workspace AND the client owner's login in one
+ * step (admin only). The Brand Designer fills in the brand book afterwards.
+ * Creating the client login uses the Supabase Admin API → needs service_role.
+ */
 export async function createBrand(input: {
   name: string;
-  slug?: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPassword: string;
 }): Promise<ActionResult> {
   const session = await requireAdmin();
   const name = input.name.trim();
+  const ownerEmail = input.ownerEmail.trim().toLowerCase();
   if (!name) return { error: "Brand name is required." };
-  const slug = slugify(input.slug?.trim() || name);
+  if (!ownerEmail) return { error: "Client owner email is required." };
+  if (!input.ownerPassword || input.ownerPassword.length < 8)
+    return { error: "Owner password must be at least 8 characters." };
+  if (!hasServiceRole())
+    return { error: "Add the service_role key (Vercel + .env.local) to create the client login." };
+
+  const slug = slugify(name);
   if (!slug) return { error: "Could not derive a slug from that name." };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+
+  // 1. Create the brand.
+  const { data: ws, error: wsErr } = await admin
     .from("workspaces")
     .insert({ name, slug, created_by: session.userId })
     .select("id")
     .single<{ id: string }>();
-
-  if (error) {
-    if (error.code === "23505") return { error: `A brand with slug "${slug}" already exists.` };
-    return { error: error.message };
+  if (wsErr) {
+    if (wsErr.code === "23505") return { error: `A brand with slug "${slug}" already exists.` };
+    return { error: wsErr.message };
   }
+
+  // 2. Create the client owner's login.
+  const { data: created, error: userErr } = await admin.auth.admin.createUser({
+    email: ownerEmail,
+    password: input.ownerPassword,
+    email_confirm: true,
+    user_metadata: { full_name: input.ownerName.trim() || ownerEmail },
+  });
+  if (userErr) {
+    await admin.from("workspaces").delete().eq("id", ws!.id); // roll back the brand
+    return { error: `Client login failed: ${userErr.message}` };
+  }
+  const clientId = created.user.id;
+
+  // 3. Mark them a client + grant membership to their brand.
+  await admin
+    .from("profiles")
+    .update({ account_type: "client", full_name: input.ownerName.trim() || ownerEmail })
+    .eq("id", clientId);
+  const { error: memErr } = await admin
+    .from("memberships")
+    .insert({ workspace_id: ws!.id, user_id: clientId, role: "client" });
+  if (memErr) {
+    await admin.auth.admin.deleteUser(clientId);
+    await admin.from("workspaces").delete().eq("id", ws!.id);
+    return { error: `Membership failed: ${memErr.message}` };
+  }
+
   revalidatePath("/dashboard/brands");
-  return { ok: true, id: data!.id };
+  return { ok: true, id: ws!.id };
 }
 
 export interface BrandBookInput {

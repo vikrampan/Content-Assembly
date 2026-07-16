@@ -23,20 +23,21 @@ export default async function BrandsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold">Brand Books</h1>
           <p className="text-sm opacity-60">
-            Stage 01 — lock each brand&apos;s constitution. Every desk builds from it;
-            the QA firewall enforces it.
+            {session.fn === "admin"
+              ? "Onboard brands and their client logins. The Brand Designer locks each brand book."
+              : "Lock each brand's constitution — every desk builds from it, and QA enforces it."}
           </p>
         </div>
-        <CreateBrandForm />
+        {session.fn === "admin" ? <CreateBrandForm /> : null}
       </div>
 
       {brands.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-black/15 p-10 text-center text-sm opacity-60 dark:border-white/15">
-          No brands yet. Create your first brand above.
+          {session.fn === "admin" ? "No brands yet. Onboard your first brand above." : "No brands yet."}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
