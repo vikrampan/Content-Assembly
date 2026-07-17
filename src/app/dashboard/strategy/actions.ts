@@ -113,7 +113,8 @@ export async function runStrategyDesk(input: {
       workspace_id: input.workspaceId,
       title,
       format: decision.dbFormat,
-      status: "research", // enters the pipeline at the Strategy desk
+      status: "research", // legacy status column (vestigial)
+      stage: "content", // AI has drafted copy → lands on the Content desk to refine
       objective: input.objective,
       format_type: decision.formatType,
       format_rationale: decision.rationale,

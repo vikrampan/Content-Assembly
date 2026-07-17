@@ -28,6 +28,7 @@ export async function createPlannedPost(input: {
     title,
     format: decision.dbFormat,
     status: "ideation",
+    stage: "planning", // sits with the admin until routed to a desk
     objective: input.objective,
     format_type: decision.formatType,
     format_rationale: decision.rationale,

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireDeskAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getDepartment, DEPARTMENT_LABELS } from "@/lib/mendly/departments";
-import { STATUS_LABELS } from "@/lib/pipeline";
+import { deskStage, STAGE_LABEL } from "@/lib/mendly/stages";
 import type { AiPersona, ContentItem, Workspace } from "@/lib/types";
 
 // Desks whose production tools depend on an external AI/service key you'll add
@@ -28,12 +28,15 @@ export default async function DeskPage({
 
   const supabase = await createClient();
 
-  // Items the admin has routed to this desk (the inbox).
-  const { data: assignedRaw } = await supabase
-    .from("content_items")
-    .select("*")
-    .eq("assigned_dept", d.key)
-    .order("updated_at", { ascending: false });
+  // Items that have flowed to this desk's pipeline stage (the inbox).
+  const myStage = deskStage(d.key);
+  const { data: assignedRaw } = myStage
+    ? await supabase
+        .from("content_items")
+        .select("*")
+        .eq("stage", myStage)
+        .order("updated_at", { ascending: false })
+    : { data: [] };
   const assigned = (assignedRaw as ContentItem[]) ?? [];
 
   // The desk's AI persona(s) + a workspace-name lookup.
@@ -43,6 +46,17 @@ export default async function DeskPage({
   ]);
   const personas = (personasRaw as AiPersona[]) ?? [];
   const wsName = new Map(((wsRaw as Pick<Workspace, "id" | "name">[]) ?? []).map((w) => [w.id, w.name]));
+
+  // Social desk: the publish queue (everything scheduled / live).
+  let queue: ContentItem[] = [];
+  if (d.key === "social") {
+    const { data: q } = await supabase
+      .from("content_items")
+      .select("*")
+      .in("stage", ["scheduling", "published"])
+      .order("scheduled_at", { ascending: true, nullsFirst: false });
+    queue = (q as ContentItem[]) ?? [];
+  }
 
   const awaiting = AWAITING[d.key];
 
@@ -94,7 +108,7 @@ export default async function DeskPage({
                     <span className="font-semibold">Brief: </span>{item.assignment_note}
                   </div>
                 ) : (
-                  <div className="mt-1.5 text-[11px] opacity-45">{STATUS_LABELS[item.status]}</div>
+                  <div className="mt-1.5 text-[11px] opacity-45">{STAGE_LABEL[item.stage] ?? item.stage}</div>
                 )}
               </Link>
             ))}
@@ -102,7 +116,30 @@ export default async function DeskPage({
         )}
       </section>
 
-      {/* Awaiting-integration seam */}
+      {/* Social publish queue */}
+      {d.key === "social" ? (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold">Publish queue <span className="opacity-50">({queue.length})</span></h2>
+          {queue.length === 0 ? (
+            <div className="rounded-2xl p-8 text-center text-sm card" style={{ color: "var(--muted)" }}>
+              Nothing scheduled yet — approved posts land here to be queued.
+            </div>
+          ) : (
+            <div className="card overflow-hidden">
+              {queue.map((c, i) => (
+                <Link key={c.id} href={`/dashboard/content/${c.id}`} className="flex items-center gap-3 px-4 py-3 transition hover:bg-black/[0.03] dark:hover:bg-white/[0.03]" style={i > 0 ? { borderTop: "1px solid var(--line)" } : undefined}>
+                  <span className={`pill ${c.stage === "published" ? "published" : "scheduled"}`}>{c.stage === "published" ? "Live" : "Queued"}</span>
+                  <span className="flex-1 truncate text-sm font-medium">{c.title}</span>
+                  <span className="text-xs" style={{ color: "var(--faint)" }}>{wsName.get(c.workspace_id) ?? ""}</span>
+                  <span className="w-40 text-right text-xs tabular-nums" style={{ color: "var(--muted)" }}>
+                    {c.scheduled_at ? new Date(c.scheduled_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "unscheduled"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {/* Awaiting-integration seam */}
       {awaiting ? (

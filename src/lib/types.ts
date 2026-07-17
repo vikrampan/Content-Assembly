@@ -47,6 +47,39 @@ export interface Workspace {
   do_rules: string | null;
   never_rules: string | null;
   locations: string | null;
+  // 0014 — Brand Designer visual kit
+  accent_hex: string | null;
+  palette: { hex: string; name?: string }[] | null;
+  logo_rules: string | null;
+  logo_path: string | null;
+}
+
+export type AssetKindExt = AssetKind | "logo" | "font" | "brand";
+
+export interface ContentVersion {
+  id: string;
+  content_id: string;
+  workspace_id: string;
+  hook: string | null;
+  educational_shift: string | null;
+  solution: string | null;
+  tone: string | null;
+  note: string | null;
+  author_id: string | null;
+  created_at: string;
+}
+
+export interface PostMetric {
+  id: string;
+  content_id: string;
+  workspace_id: string;
+  day: string;
+  reach: number;
+  impressions: number;
+  engagement: number;
+  likes: number;
+  comments: number;
+  saves: number;
 }
 
 export interface Membership {
@@ -80,14 +113,20 @@ export interface ContentItem {
   planned_date: string | null;
   assigned_dept: string | null;
   assignment_note: string | null;
+  stage: string;
+  tone: string | null;
+  scheduled_at: string | null;
+  qa_notes: Record<string, string> | null;
+  qa_reject_reasons: string | null;
 }
 
 export interface Asset {
   id: string;
   workspace_id: string;
   content_id: string | null;
-  kind: AssetKind;
+  kind: AssetKind | "logo" | "font" | "brand";
   storage_path: string;
+  label: string | null;
   uploaded_by: string | null;
   created_at: string;
 }

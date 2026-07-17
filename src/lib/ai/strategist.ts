@@ -45,13 +45,16 @@ function brandSystemPrompt(ws: Workspace): string {
     .join("\n");
 }
 
-function userPrompt(brief: string, decision: FormatDecision): string {
+function userPrompt(brief: string, decision: FormatDecision, tone?: string | null): string {
   return [
     `Objective: ${decision.goal}.`,
     `Chosen format: ${decision.formatType} (${decision.medium}).`,
     `Brief from the client: ${brief}`,
+    tone?.trim() ? `Lean into this tone/angle for this pass: ${tone.trim()}.` : "",
     `Write the three-tier copy for this asset.`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function stubDraft(brief: string, decision: FormatDecision): CopyDraft {
@@ -89,6 +92,7 @@ export async function draftCopy(
   brief: string,
   decision: FormatDecision,
   persona?: Persona | null,
+  tone?: string | null,
 ): Promise<CopyDraft> {
   if (!hasAnthropic()) return stubDraft(brief, decision);
 
@@ -101,7 +105,7 @@ export async function draftCopy(
       thinking: { type: "adaptive" },
       output_config: { effort: "medium" },
       system: composeSystem(ws, persona),
-      messages: [{ role: "user", content: userPrompt(brief, decision) }],
+      messages: [{ role: "user", content: userPrompt(brief, decision, tone) }],
     });
     const text = msg.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")

@@ -174,3 +174,83 @@ export async function updateBrandBook(input: BrandBookInput): Promise<ActionResu
   revalidatePath(`/dashboard/brands/${input.id}`);
   return { ok: true };
 }
+
+// ===========================================================================
+// Brand Designer — visual kit (logos, fonts, palette, logo rules).
+// Uploads happen client-side (Supabase Storage RLS scopes them to the brand);
+// these actions record the asset rows and the palette/rule metadata.
+// ===========================================================================
+
+/** Save the extra palette + accent colour + logo usage rules. */
+export async function saveVisualKit(input: {
+  id: string;
+  accent_hex: string | null;
+  palette: { hex: string; name?: string }[];
+  logo_rules: string | null;
+}): Promise<ActionResult> {
+  await requireBrandEditor();
+  const clean = (input.palette ?? [])
+    .map((p) => ({ hex: (p.hex ?? "").replace(/^#/, "").trim(), name: (p.name ?? "").trim() || undefined }))
+    .filter((p) => HEX_RE.test(p.hex));
+  const accent = (input.accent_hex ?? "").replace(/^#/, "").trim();
+  if (accent && !HEX_RE.test(accent)) return { error: `Accent hex "${accent}" is not a 6-digit hex code.` };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workspaces")
+    .update({
+      accent_hex: accent || null,
+      palette: clean.length ? clean : null,
+      logo_rules: (input.logo_rules ?? "").trim() || null,
+    })
+    .eq("id", input.id);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/brands/${input.id}`);
+  return { ok: true };
+}
+
+/** Register an uploaded brand asset (logo/font/brand) and optionally make it the primary logo. */
+export async function registerBrandAsset(input: {
+  workspaceId: string;
+  storagePath: string;
+  kind: "logo" | "font" | "brand";
+  label: string;
+  makePrimaryLogo?: boolean;
+}): Promise<ActionResult> {
+  const session = await requireBrandEditor();
+  const supabase = await createClient();
+  const { error } = await supabase.from("assets").insert({
+    workspace_id: input.workspaceId,
+    kind: input.kind,
+    storage_path: input.storagePath,
+    label: input.label,
+    uploaded_by: session.userId,
+  });
+  if (error) return { error: error.message };
+  if (input.makePrimaryLogo || input.kind === "logo") {
+    await supabase.from("workspaces").update({ logo_path: input.storagePath }).eq("id", input.workspaceId);
+  }
+  revalidatePath(`/dashboard/brands/${input.workspaceId}`);
+  return { ok: true };
+}
+
+/** Delete a brand asset (object + row); clears logo_path if it was the primary. */
+export async function deleteBrandAsset(assetId: string): Promise<ActionResult> {
+  await requireBrandEditor();
+  const supabase = await createClient();
+  const { data: a } = await supabase
+    .from("assets")
+    .select("id, storage_path, workspace_id")
+    .eq("id", assetId)
+    .single<{ id: string; storage_path: string; workspace_id: string }>();
+  if (!a) return { error: "Not found." };
+  await supabase.storage.from("assets").remove([a.storage_path]);
+  await supabase.from("assets").delete().eq("id", assetId);
+  await supabase
+    .from("workspaces")
+    .update({ logo_path: null })
+    .eq("id", a.workspace_id)
+    .eq("logo_path", a.storage_path);
+  revalidatePath(`/dashboard/brands/${a.workspace_id}`);
+  return { ok: true };
+}

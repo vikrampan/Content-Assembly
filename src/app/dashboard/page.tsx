@@ -2,16 +2,13 @@ import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { ClientPortal } from "./ClientPortal";
-import { columnsForRole } from "@/lib/pipeline";
-import type { ContentItem, ContentStatus, Workspace } from "@/lib/types";
+import type { ContentItem, Workspace } from "@/lib/types";
 
 function Metric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+    <div className="rounded-2xl border border-black/10 bg-[var(--panel)] p-4 shadow-sm">
       <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="mt-0.5 text-xs uppercase tracking-wide opacity-55">
-        {label}
-      </div>
+      <div className="mt-0.5 text-xs uppercase tracking-wide opacity-55">{label}</div>
     </div>
   );
 }
@@ -19,108 +16,46 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 export default async function DashboardPage() {
   const session = await requireAccess("board");
 
-  // Clients get their own polished portal, not the internal board.
+  // Clients get their own polished portal, not the internal control room.
   if (session.fn === "client") return <ClientPortal />;
 
   const supabase = await createClient();
-
-  // RLS scopes every one of these queries automatically. A client literally
-  // cannot receive another workspace's rows or internal WIP — the filters
-  // below are for UX ordering, not the security boundary.
-  const { data: contentRaw } = await supabase
-    .from("content_items")
-    .select("*")
-    .order("updated_at", { ascending: false });
+  const [{ data: contentRaw }, { data: wsRaw }] = await Promise.all([
+    supabase.from("content_items").select("*").order("updated_at", { ascending: false }),
+    supabase.from("workspaces").select("*").order("name"),
+  ]);
   const content = (contentRaw as ContentItem[]) ?? [];
+  const workspaces = (wsRaw as Workspace[]) ?? [];
+  const wsName = Object.fromEntries(workspaces.map((w) => [w.id, w.name]));
 
-  const { data: workspacesRaw } = await supabase
-    .from("workspaces")
-    .select("*")
-    .order("name");
-  const workspaces = (workspacesRaw as Workspace[]) ?? [];
-
-  const columns = columnsForRole(session.role);
-
-  const countBy = (statuses: ContentStatus[]) =>
-    content.filter((c) => statuses.includes(c.status)).length;
-
-  // --- Role-specific header ------------------------------------------------
-  const headers: Record<string, { title: string; subtitle: string }> = {
-    admin: {
-      title: "Master Control Room",
-      subtitle: "All workspaces, pipeline bottlenecks, and team activity.",
-    },
-    team_incharge: {
-      title: "Creator Workspace",
-      subtitle: "Execute the 4-Layer SOP across your assigned clients.",
-    },
-    client: {
-      title: "Your Content Pipeline",
-      subtitle: "Review, approve, and track your brand's content.",
-    },
-  };
-  const header = headers[session.role];
+  const count = (stages: string[]) => content.filter((c) => stages.includes(c.stage)).length;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold">{header.title}</h1>
-        <p className="text-sm opacity-60">{header.subtitle}</p>
+        <h1 className="font-serif text-xl font-semibold" style={{ fontFamily: "Georgia, serif" }}>
+          {session.fn === "admin" ? "Control Room" : "Pipeline"}
+        </h1>
+        <p className="text-sm opacity-60">
+          {session.fn === "admin"
+            ? "Every card, every desk — route work and watch it flow."
+            : "Plan the month and move work through the pipeline."}
+        </p>
       </div>
 
-      {/* Metrics vary by role. */}
-      {session.role === "admin" ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Metric label="Workspaces" value={workspaces.length} />
-          <Metric label="Total content" value={content.length} />
-          <Metric label="Awaiting admin" value={countBy(["admin_review"])} />
-          <Metric
-            label="With client"
-            value={countBy(["ready_for_client_review", "changes_requested"])}
-          />
-        </div>
-      ) : session.role === "team_incharge" ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Metric
-            label="In production"
-            value={countBy(["research", "copywriting", "visuals", "assembly"])}
-          />
-          <Metric label="Admin review" value={countBy(["admin_review"])} />
-          <Metric
-            label="Changes requested"
-            value={countBy(["changes_requested"])}
-          />
-          <Metric
-            label="Live / scheduled"
-            value={countBy(["scheduled", "published"])}
-          />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Metric
-            label="Pending your approval"
-            value={countBy(["ready_for_client_review"])}
-          />
-          <Metric
-            label="Approved"
-            value={countBy(["approved", "scheduled", "published"])}
-          />
-          <Metric label="Ideas shared" value={countBy(["ideation"])} />
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <Metric label="Total cards" value={content.length} />
+        <Metric label="With admin" value={count(["planning"])} />
+        <Metric label="In production" value={count(["content", "production"])} />
+        <Metric label="With client" value={count(["client_review"])} />
+        <Metric label="Live / scheduled" value={count(["scheduling", "published"])} />
+      </div>
 
-      {/* Admin sees which workspaces exist; a client never sees this list. */}
-      {session.role === "admin" && workspaces.length > 0 ? (
+      {session.fn === "admin" && workspaces.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {workspaces.map((w) => (
-            <span
-              key={w.id}
-              className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/60 px-3 py-1 text-xs dark:border-white/10 dark:bg-white/5"
-            >
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ background: `#${w.primary_hex ?? "cccccc"}` }}
-              />
+            <span key={w.id} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-[var(--panel)] px-3 py-1 text-xs">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: `#${w.primary_hex ?? "cccccc"}` }} />
               {w.name}
             </span>
           ))}
@@ -129,15 +64,10 @@ export default async function DashboardPage() {
 
       {content.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-black/15 p-10 text-center text-sm opacity-60 dark:border-white/15">
-          No content visible to you yet.
-          {session.role === "admin"
-            ? " Create a workspace and seed some content to get started (see supabase/seed.sql)."
-            : session.role === "client"
-              ? " Your team will share items here when they're ready for review."
-              : " Get assigned to a workspace, or create your first content item."}
+          No cards yet. {session.fn === "admin" ? "Onboard a brand and plan the calendar to get started." : "Plan the calendar to get started."}
         </div>
       ) : (
-        <KanbanBoard columns={columns} items={content} role={session.role} />
+        <KanbanBoard items={content} wsName={wsName} />
       )}
     </div>
   );

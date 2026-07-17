@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { ContentStatus } from "@/lib/types";
+import { isValidStage } from "@/lib/mendly/stages";
+import { notifyChangesRequested } from "@/lib/email/resend";
 
 /** Client signs off (or requests changes) on a month's calendar. */
 export async function reviewCalendar(
@@ -44,36 +45,19 @@ export async function reviewCalendar(
  * path is `clientReview`, which goes through the column-restricted RPC.
  */
 
-const VALID_STATUSES: ContentStatus[] = [
-  "ideation",
-  "research",
-  "copywriting",
-  "visuals",
-  "assembly",
-  "admin_review",
-  "ready_for_client_review",
-  "changes_requested",
-  "approved",
-  "scheduled",
-  "published",
-];
-
 export type ActionResult = { ok: true } | { error: string };
 
+/** Admin/strategy drag a card between stage columns on the board. */
 export async function moveStage(
   contentId: string,
-  toStatus: ContentStatus,
+  toStage: string,
 ): Promise<ActionResult> {
-  if (!VALID_STATUSES.includes(toStatus)) {
-    return { error: `Invalid stage: ${toStatus}` };
-  }
-
+  if (!isValidStage(toStage)) return { error: `Invalid stage: ${toStage}` };
   const supabase = await createClient();
   const { error } = await supabase
     .from("content_items")
-    .update({ status: toStatus })
+    .update({ stage: toStage })
     .eq("id", contentId);
-
   if (error) return { error: error.message };
   revalidatePath("/dashboard");
   return { ok: true };
@@ -92,6 +76,51 @@ export async function clientReview(
   });
 
   if (error) return { error: error.message };
+
+  // Best-effort: nudge the team when the client asks for changes.
+  if (decision === "request_changes") {
+    const { data: item } = await supabase
+      .from("content_items")
+      .select("title")
+      .eq("id", contentId)
+      .single<{ title: string }>();
+    await notifyChangesRequested(item?.title ?? "a post", comment?.trim() ?? "");
+  }
+
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+/**
+ * Granular calendar review: a client leaves a suggestion on a single planned
+ * post. Stored as a non-internal comment (RLS lets the client insert on their
+ * own workspace); the desks see it on the content detail page.
+ */
+export async function suggestPost(
+  contentId: string,
+  body: string,
+): Promise<{ ok: true } | { error: string }> {
+  const session = await requireSession();
+  const text = body.trim();
+  if (!text) return { error: "Write a suggestion first." };
+
+  const supabase = await createClient();
+  const { data: item } = await supabase
+    .from("content_items")
+    .select("workspace_id")
+    .eq("id", contentId)
+    .single<{ workspace_id: string }>();
+  if (!item) return { error: "Post not found." };
+
+  const { error } = await supabase.from("comments").insert({
+    content_id: contentId,
+    workspace_id: item.workspace_id,
+    author_id: session.userId,
+    body: text,
+    internal: false,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard");
+  revalidatePath(`/dashboard/content/${contentId}`);
   return { ok: true };
 }
