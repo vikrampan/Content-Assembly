@@ -1,6 +1,7 @@
 import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { ClientPortal } from "./ClientPortal";
 import { columnsForRole } from "@/lib/pipeline";
 import type { ContentItem, ContentStatus, Workspace } from "@/lib/types";
 
@@ -17,6 +18,10 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 
 export default async function DashboardPage() {
   const session = await requireAccess("board");
+
+  // Clients get their own polished portal, not the internal board.
+  if (session.fn === "client") return <ClientPortal />;
+
   const supabase = await createClient();
 
   // RLS scopes every one of these queries automatically. A client literally

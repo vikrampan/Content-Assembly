@@ -1,8 +1,39 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { ContentStatus } from "@/lib/types";
+
+/** Client signs off (or requests changes) on a month's calendar. */
+export async function reviewCalendar(
+  workspaceId: string,
+  month: string, // YYYY-MM-01
+  decision: "approve" | "request_changes",
+  note?: string,
+): Promise<{ ok: true } | { error: string }> {
+  const session = await requireSession();
+  if (session.role !== "client") return { error: "Only the client approves the calendar." };
+  const status = decision === "approve" ? "approved" : "changes_requested";
+  if (status === "changes_requested" && !note?.trim())
+    return { error: "Please add a note about what to change." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("calendar_approvals").upsert(
+    {
+      workspace_id: workspaceId,
+      month,
+      status,
+      note: note?.trim() || null,
+      decided_by: session.userId,
+      decided_at: new Date().toISOString(),
+    },
+    { onConflict: "workspace_id,month" },
+  );
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
 
 /**
  * Server actions backing the interactive Kanban.

@@ -92,6 +92,15 @@ export interface Asset {
   created_at: string;
 }
 
+export interface CalendarApproval {
+  id: string;
+  workspace_id: string;
+  month: string;
+  status: "pending" | "approved" | "changes_requested";
+  note: string | null;
+  decided_at: string | null;
+}
+
 export interface Comment {
   id: string;
   content_id: string;
