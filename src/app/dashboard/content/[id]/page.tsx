@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABELS } from "@/lib/pipeline";
 import { OBJECTIVE_LABELS, type Objective } from "@/lib/mendly/strategy";
 import type { ContentItem, Workspace } from "@/lib/types";
+import { AssignPanel } from "./AssignPanel";
 import { ContentEditor } from "./ContentEditor";
 import { QaFirewall } from "./QaFirewall";
 
@@ -55,6 +56,14 @@ export default async function ContentDetailPage({
         </div>
         {ws ? <p className="text-sm opacity-60">{ws.name}</p> : null}
       </div>
+
+      {/* Admin routing / desk hand-off. */}
+      <AssignPanel
+        contentId={item.id}
+        assignedDept={item.assigned_dept}
+        note={item.assignment_note}
+        fn={session.fn}
+      />
 
       {/* The brief that travels with the asset (Stage 04). */}
       <section className="grid gap-4 rounded-2xl border border-black/10 bg-white/60 p-4 sm:grid-cols-2 dark:border-white/10 dark:bg-white/5">

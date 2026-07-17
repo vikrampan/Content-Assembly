@@ -3,10 +3,57 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { userFunction } from "@/lib/mendly/access";
 import { QA_FIREWALL } from "@/lib/mendly/pipeline";
 import type { ContentStatus } from "@/lib/types";
 
 export type ActionResult = { ok: true; message?: string } | { error: string };
+
+/** Admin routes an item to a desk with a brief. */
+export async function assignToDept(
+  contentId: string,
+  dept: string,
+  note: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role !== "admin") return { error: "Only admin can assign work." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("content_items")
+    .update({ assigned_dept: dept, assignment_note: note.trim() || null })
+    .eq("id", contentId);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/content/${contentId}`);
+  revalidatePath("/dashboard");
+  return { ok: true, message: `Sent to the ${dept} desk.` };
+}
+
+/** The assigned desk (or admin) returns an item to admin. */
+export async function returnToAdmin(contentId: string, note: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const fn = userFunction(session.profile);
+
+  const supabase = await createClient();
+  const { data: item } = await supabase
+    .from("content_items")
+    .select("assigned_dept")
+    .eq("id", contentId)
+    .single<{ assigned_dept: string | null }>();
+  if (!item) return { error: "Not found." };
+  if (fn !== "admin" && fn !== item.assigned_dept) {
+    return { error: "This item isn't on your desk." };
+  }
+
+  const { error } = await supabase
+    .from("content_items")
+    .update({ assigned_dept: null, assignment_note: note.trim() || null })
+    .eq("id", contentId);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/content/${contentId}`);
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Returned to admin." };
+}
 
 /**
  * Refine the AI-drafted content: title + the three-tier copy. Team/admin only

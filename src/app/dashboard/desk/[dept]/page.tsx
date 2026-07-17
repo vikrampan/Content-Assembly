@@ -28,16 +28,13 @@ export default async function DeskPage({
 
   const supabase = await createClient();
 
-  // The desk's live queue (content items sitting at the statuses it owns).
-  let queue: ContentItem[] = [];
-  if (d.statuses.length > 0) {
-    const { data } = await supabase
-      .from("content_items")
-      .select("*")
-      .in("status", d.statuses)
-      .order("updated_at", { ascending: false });
-    queue = (data as ContentItem[]) ?? [];
-  }
+  // Items the admin has routed to this desk (the inbox).
+  const { data: assignedRaw } = await supabase
+    .from("content_items")
+    .select("*")
+    .eq("assigned_dept", d.key)
+    .order("updated_at", { ascending: false });
+  const assigned = (assignedRaw as ContentItem[]) ?? [];
 
   // The desk's AI persona(s) + a workspace-name lookup.
   const [{ data: personasRaw }, { data: wsRaw }] = await Promise.all([
@@ -70,37 +67,42 @@ export default async function DeskPage({
         </Link>
       ) : null}
 
-      {/* The live queue */}
-      {d.statuses.length > 0 ? (
-        <section>
-          <h2 className="mb-2 text-sm font-semibold">
-            Your queue <span className="opacity-50">({queue.length})</span>
-          </h2>
-          {queue.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-black/15 p-8 text-center text-sm opacity-55 dark:border-white/15">
-              Nothing at this desk right now — work arrives here when it reaches{" "}
-              {d.statuses.map((s) => STATUS_LABELS[s]).join(" / ")}.
-            </div>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {queue.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/dashboard/content/${item.id}`}
-                  className="rounded-xl border border-black/10 bg-white/60 p-3 transition hover:shadow-md dark:border-white/10 dark:bg-white/5"
-                >
-                  <div className="flex items-center gap-2 text-xs opacity-50">
-                    <span className="uppercase tracking-wide">{item.format}</span>
-                    <span className="ml-auto">{wsName.get(item.workspace_id) ?? ""}</span>
+      {/* The inbox — items the admin routed to this desk */}
+      <section>
+        <h2 className="mb-2 text-sm font-semibold">
+          Assigned to your desk <span className="opacity-50">({assigned.length})</span>
+        </h2>
+        {assigned.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-black/15 p-8 text-center text-sm opacity-55 dark:border-white/15">
+            Nothing on your desk right now — the admin routes work here with a brief.
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {assigned.map((item) => (
+              <Link
+                key={item.id}
+                href={`/dashboard/content/${item.id}`}
+                className="rounded-xl border border-amber-300 bg-amber-50/60 p-3 transition hover:shadow-md dark:border-amber-900/50 dark:bg-amber-950/20"
+              >
+                <div className="flex items-center gap-2 text-xs opacity-50">
+                  <span className="uppercase tracking-wide">{item.format}</span>
+                  <span className="ml-auto">{wsName.get(item.workspace_id) ?? ""}</span>
+                </div>
+                <div className="mt-1 text-sm font-medium leading-snug">{item.title}</div>
+                {item.assignment_note ? (
+                  <div className="mt-1.5 line-clamp-2 text-[11px] opacity-70">
+                    <span className="font-semibold">Brief: </span>{item.assignment_note}
                   </div>
-                  <div className="mt-1 text-sm font-medium leading-snug">{item.title}</div>
+                ) : (
                   <div className="mt-1.5 text-[11px] opacity-45">{STATUS_LABELS[item.status]}</div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-      ) : null}
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Awaiting-integration seam */}
 
       {/* Awaiting-integration seam */}
       {awaiting ? (

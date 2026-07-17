@@ -78,6 +78,8 @@ export interface ContentItem {
   brief: Record<string, unknown> | null;
   qa_checklist: Record<string, boolean> | null;
   planned_date: string | null;
+  assigned_dept: string | null;
+  assignment_note: string | null;
 }
 
 export interface Asset {
