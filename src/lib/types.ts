@@ -193,6 +193,30 @@ export interface Asset {
   label: string | null;
   uploaded_by: string | null;
   created_at: string;
+  // 0016 — DAM metadata
+  tags: string[];
+  rating: number;
+  select_status: "none" | "pick" | "reject";
+  note: string | null;
+  collection: string | null;
+  captured_at: string | null;
+  rights: string | null;
+  // 0016 — AI generation
+  prompt: string | null;
+  gen_provider: string | null;
+  gen_status: "ready" | "pending" | "failed";
+  gen_ref: string | null;
+}
+
+export interface CaptureBrief {
+  id: string;
+  workspace_id: string;
+  title: string;
+  focus: string | null;
+  shots: { shot: string; note?: string; done?: boolean }[];
+  status: "open" | "shot" | "archived";
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface CalendarApproval {

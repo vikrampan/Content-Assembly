@@ -245,7 +245,7 @@ export async function restoreVersion(versionId: string): Promise<ActionResult> {
   return { ok: true, message: "Restored." };
 }
 
-/** Remove a creative deliverable (asset row + the stored object). Team/admin only. */
+/** Remove a creative deliverable — keeps the file if another row still uses it. */
 export async function removeAsset(assetId: string): Promise<ActionResult> {
   const session = await requireSession();
   if (session.role === "client") return { error: "Not authorized." };
@@ -256,10 +256,81 @@ export async function removeAsset(assetId: string): Promise<ActionResult> {
     .eq("id", assetId)
     .single<{ id: string; storage_path: string; content_id: string | null }>();
   if (!asset) return { error: "Not found." };
-  await supabase.storage.from("assets").remove([asset.storage_path]);
+  // Only delete the stored object if this was the last row referencing it
+  // (library picks share the file with their library row).
+  const { count } = await supabase.from("assets").select("id", { count: "exact", head: true }).eq("storage_path", asset.storage_path);
   const { error } = await supabase.from("assets").delete().eq("id", assetId);
   if (error) return { error: error.message };
+  if ((count ?? 0) <= 1 && !asset.storage_path.startsWith("pending/")) {
+    await supabase.storage.from("assets").remove([asset.storage_path]);
+  }
   if (asset.content_id) await reval(asset.content_id);
+  return { ok: true };
+}
+
+export interface LibraryPick {
+  id: string;
+  url: string | null;
+  name: string;
+  kind: string;
+  isImage: boolean;
+  isVideo: boolean;
+}
+
+const PICK_IMG = /\.(png|jpe?g|gif|webp|avif)$/i;
+const PICK_VID = /\.(mp4|mov|webm|m4v)$/i;
+
+/** List the brand's library media (shot or generated) to pick as a deliverable. */
+export async function listLibraryPicks(workspaceId: string): Promise<LibraryPick[]> {
+  const session = await requireSession();
+  if (session.role === "client") return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("assets")
+    .select("id, storage_path, kind, label")
+    .eq("workspace_id", workspaceId)
+    .is("content_id", null)
+    .in("kind", ["raw", "generated", "final"])
+    .eq("gen_status", "ready")
+    .order("created_at", { ascending: false })
+    .limit(60);
+  const rows = (data as { id: string; storage_path: string; kind: string; label: string | null }[]) ?? [];
+  return Promise.all(
+    rows.map(async (a) => {
+      const { data: signed } = await supabase.storage.from("assets").createSignedUrl(a.storage_path, 3600);
+      return {
+        id: a.id,
+        url: signed?.signedUrl ?? null,
+        name: a.label ?? (a.storage_path.split("/").pop() ?? "asset"),
+        kind: a.kind,
+        isImage: PICK_IMG.test(a.storage_path),
+        isVideo: PICK_VID.test(a.storage_path),
+      };
+    }),
+  );
+}
+
+/** Attach a library asset to a content card as a deliverable (shares the file). */
+export async function attachLibraryAsset(contentId: string, assetId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const supabase = await createClient();
+  const { data: src } = await supabase
+    .from("assets")
+    .select("workspace_id, storage_path, label, kind")
+    .eq("id", assetId)
+    .single<{ workspace_id: string; storage_path: string; label: string | null; kind: string }>();
+  if (!src) return { error: "Asset not found." };
+  const { error } = await supabase.from("assets").insert({
+    workspace_id: src.workspace_id,
+    content_id: contentId,
+    storage_path: src.storage_path,
+    kind: "final",
+    label: src.label,
+    uploaded_by: session.userId,
+  });
+  if (error) return { error: error.message };
+  await reval(contentId);
   return { ok: true };
 }
 

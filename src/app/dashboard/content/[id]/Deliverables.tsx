@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { removeAsset } from "./actions";
+import { attachLibraryAsset, listLibraryPicks, removeAsset, type LibraryPick } from "./actions";
 
 export interface DeliverableView {
   id: string;
@@ -26,9 +26,23 @@ export function Deliverables({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [markFinal, setMarkFinal] = useState(true);
+  const [picker, setPicker] = useState(false);
+  const [picks, setPicks] = useState<LibraryPick[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const [, start] = useTransition();
+
+  function openPicker() {
+    setPicker(true); setPicks(null); setError(null);
+    start(async () => { setPicks(await listLibraryPicks(workspaceId)); });
+  }
+  function attach(assetId: string) {
+    start(async () => {
+      const res = await attachLibraryAsset(contentId, assetId);
+      if ("error" in res) setError(res.error);
+      else { setPicker(false); router.refresh(); }
+    });
+  }
 
   async function onFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -114,10 +128,47 @@ export function Deliverables({
       )}
 
       <input ref={fileRef} type="file" multiple className="hidden" accept="image/*,video/*,audio/*,.pdf" onChange={(e) => onFiles(e.target.files)} />
-      <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--accent)" }}>
-        {busy ? "Uploading…" : "Upload creative"}
-      </button>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--accent)" }}>
+          {busy ? "Uploading…" : "Upload creative"}
+        </button>
+        <button type="button" onClick={openPicker} className="rounded-lg px-4 py-2 text-sm font-semibold" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>
+          Add from Library
+        </button>
+      </div>
       {error ? <div className="mt-2 text-xs" style={{ color: "var(--danger)" }}>{error}</div> : null}
+
+      {picker ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.45)" }} onClick={() => setPicker(false)}>
+          <div className="card max-h-[80vh] w-full max-w-2xl overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Pick from the Media Library</h3>
+              <button type="button" onClick={() => setPicker(false)} style={{ color: "var(--faint)" }}>×</button>
+            </div>
+            {picks === null ? (
+              <div className="py-10 text-center text-sm" style={{ color: "var(--muted)" }}>Loading…</div>
+            ) : picks.length === 0 ? (
+              <div className="py-10 text-center text-sm" style={{ color: "var(--muted)" }}>No library media for this brand yet.</div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {picks.map((p) => (
+                  <button key={p.id} type="button" onClick={() => attach(p.id)} className="group overflow-hidden rounded-xl text-left transition hover:shadow-md" style={{ border: "1px solid var(--line)" }}>
+                    <div className="flex aspect-square items-center justify-center" style={{ background: "var(--panel-2)" }}>
+                      {p.isImage && p.url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
+                      ) : p.isVideo && p.url ? (
+                        <video src={p.url} className="h-full w-full object-cover" muted />
+                      ) : <span className="text-2xl" style={{ color: "var(--faint)" }}>▤</span>}
+                    </div>
+                    <div className="truncate px-2 py-1 text-[10px]" style={{ color: "var(--muted)" }}>{p.name}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
