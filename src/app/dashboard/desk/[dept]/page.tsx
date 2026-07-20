@@ -6,6 +6,8 @@ import { getDepartment, DEPARTMENT_LABELS } from "@/lib/mendly/departments";
 import { deskStage, STAGE_LABEL } from "@/lib/mendly/stages";
 import type { AiPersona, ContentItem, Workspace } from "@/lib/types";
 import { QaDeskPanel, type QaAnalytics, type BrandFw } from "./QaDeskPanel";
+import { SocialCockpit, type SocialEntry } from "./SocialCockpit";
+import { hasMeta } from "@/lib/social/publish";
 
 // Desks whose production tools depend on an external AI/service key you'll add
 // later. The seam is ready; this is the honest "awaiting integration" panel.
@@ -48,15 +50,19 @@ export default async function DeskPage({
   const personas = (personasRaw as AiPersona[]) ?? [];
   const wsName = new Map(((wsRaw as Pick<Workspace, "id" | "name">[]) ?? []).map((w) => [w.id, w.name]));
 
-  // Social desk: the publish queue (everything scheduled / live).
-  let queue: ContentItem[] = [];
+  // Social desk: the per-platform publish queue.
+  let socialEntries: SocialEntry[] = [];
   if (d.key === "social") {
     const { data: q } = await supabase
-      .from("content_items")
-      .select("*")
-      .in("stage", ["scheduling", "published"])
-      .order("scheduled_at", { ascending: true, nullsFirst: false });
-    queue = (q as ContentItem[]) ?? [];
+      .from("scheduled_posts")
+      .select("id, content_id, platform, scheduled_at, status, content_items(title, workspace_id)")
+      .order("scheduled_at", { ascending: true });
+    type Row = { id: string; content_id: string; platform: string; scheduled_at: string; status: SocialEntry["status"]; content_items: { title: string; workspace_id: string } | null };
+    socialEntries = ((q as Row[] | null) ?? []).map((r) => ({
+      id: r.id, content_id: r.content_id, platform: r.platform, scheduled_at: r.scheduled_at, status: r.status,
+      title: r.content_items?.title ?? "Post",
+      brand: r.content_items ? (wsName.get(r.content_items.workspace_id) ?? "") : "",
+    }));
   }
 
   // QA desk: analytics + per-brand firewall status.
@@ -148,30 +154,8 @@ export default async function DeskPage({
       {/* QA desk — analytics + brand firewalls */}
       {d.key === "qa" && qaAnalytics ? <QaDeskPanel analytics={qaAnalytics} brands={qaBrands} /> : null}
 
-      {/* Social publish queue */}
-      {d.key === "social" ? (
-        <section>
-          <h2 className="mb-2 text-sm font-semibold">Publish queue <span className="opacity-50">({queue.length})</span></h2>
-          {queue.length === 0 ? (
-            <div className="rounded-2xl p-8 text-center text-sm card" style={{ color: "var(--muted)" }}>
-              Nothing scheduled yet — approved posts land here to be queued.
-            </div>
-          ) : (
-            <div className="card overflow-hidden">
-              {queue.map((c, i) => (
-                <Link key={c.id} href={`/dashboard/content/${c.id}`} className="flex items-center gap-3 px-4 py-3 transition hover:bg-black/[0.03] dark:hover:bg-white/[0.03]" style={i > 0 ? { borderTop: "1px solid var(--line)" } : undefined}>
-                  <span className={`pill ${c.stage === "published" ? "published" : "scheduled"}`}>{c.stage === "published" ? "Live" : "Queued"}</span>
-                  <span className="flex-1 truncate text-sm font-medium">{c.title}</span>
-                  <span className="text-xs" style={{ color: "var(--faint)" }}>{wsName.get(c.workspace_id) ?? ""}</span>
-                  <span className="w-40 text-right text-xs tabular-nums" style={{ color: "var(--muted)" }}>
-                    {c.scheduled_at ? new Date(c.scheduled_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "unscheduled"}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-      ) : null}
+      {/* Social publish cockpit */}
+      {d.key === "social" ? <SocialCockpit entries={socialEntries} metaConnected={hasMeta()} /> : null}
 
       {/* Awaiting-integration seam */}
       {awaiting ? (

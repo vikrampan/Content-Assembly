@@ -625,3 +625,99 @@ export async function runAiQa(contentId: string): Promise<{ ok: true } | { error
   await reval(contentId);
   return { ok: true };
 }
+
+// ===========================================================================
+// Social desk (0020) — multi-platform scheduling + publish seam.
+// ===========================================================================
+import { publish } from "@/lib/social/publish";
+
+/** Recompute the item's primary scheduled time + stage from its platform rows. */
+async function syncSchedule(supabase: Awaited<ReturnType<typeof createClient>>, contentId: string) {
+  const { data: rows } = await supabase.from("scheduled_posts").select("scheduled_at, status").eq("content_id", contentId);
+  const list = (rows as { scheduled_at: string; status: string }[]) ?? [];
+  const queued = list.filter((r) => r.status === "queued");
+  const earliest = queued.map((r) => r.scheduled_at).sort()[0] ?? null;
+  const allPublished = list.length > 0 && list.every((r) => r.status === "published");
+  const patch: Record<string, unknown> = { scheduled_at: earliest };
+  if (allPublished) patch.stage = "published";
+  await supabase.from("content_items").update(patch).eq("id", contentId);
+}
+
+/** Schedule a post to one or more platforms (each at its own time). */
+export async function schedulePlatforms(
+  contentId: string,
+  entries: { platform: string; scheduledAt: string; firstComment?: string }[],
+  utm?: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  if (entries.length === 0) return { error: "Pick at least one platform." };
+
+  const supabase = await createClient();
+  const { data: item } = await supabase.from("content_items").select("workspace_id, stage").eq("id", contentId).single<{ workspace_id: string; stage: string }>();
+  if (!item) return { error: "Not found." };
+
+  for (const e of entries) {
+    const when = new Date(e.scheduledAt);
+    if (Number.isNaN(when.getTime())) return { error: `Invalid time for ${e.platform}.` };
+    const { error } = await supabase.from("scheduled_posts").upsert(
+      { content_id: contentId, workspace_id: item.workspace_id, platform: e.platform, scheduled_at: when.toISOString(), status: "queued", first_comment: e.firstComment?.trim() || null, utm: utm?.trim() || null, created_by: session.userId },
+      { onConflict: "content_id,platform" },
+    );
+    if (error) return { error: error.message };
+  }
+  if (item.stage !== "published" && item.stage !== "scheduling") {
+    await supabase.from("content_items").update({ stage: "scheduling" }).eq("id", contentId);
+  }
+  await syncSchedule(supabase, contentId);
+  await reval(contentId);
+  revalidatePath("/dashboard/desk/social");
+  return { ok: true, message: `Scheduled to ${entries.length} platform(s).` };
+}
+
+export async function reschedulePlatform(scheduledId: string, whenIso: string, contentId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const when = new Date(whenIso);
+  if (Number.isNaN(when.getTime())) return { error: "Invalid time." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("scheduled_posts").update({ scheduled_at: when.toISOString(), status: "queued" }).eq("id", scheduledId);
+  if (error) return { error: error.message };
+  await syncSchedule(supabase, contentId);
+  await reval(contentId);
+  revalidatePath("/dashboard/desk/social");
+  return { ok: true };
+}
+
+export async function cancelScheduled(scheduledId: string, contentId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("scheduled_posts").delete().eq("id", scheduledId);
+  if (error) return { error: error.message };
+  await syncSchedule(supabase, contentId);
+  await reval(contentId);
+  revalidatePath("/dashboard/desk/social");
+  return { ok: true };
+}
+
+/** Publish a scheduled platform now — via Meta if connected, else mark live. */
+export async function publishScheduled(scheduledId: string, contentId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const supabase = await createClient();
+  const { data: sp } = await supabase.from("scheduled_posts").select("platform, content_id").eq("id", scheduledId).single<{ platform: string; content_id: string }>();
+  if (!sp) return { error: "Not found." };
+  const { data: variant } = await supabase.from("content_variants").select("body").eq("content_id", sp.content_id).eq("platform", sp.platform).maybeSingle<{ body: string }>();
+
+  const res = await publish(sp.platform, variant?.body ?? "");
+  const patch = res.ok
+    ? { status: "published", external_id: res.externalId ?? null, published_at: new Date().toISOString() }
+    : { status: "published", published_at: new Date().toISOString() }; // manual fallback until Meta connects
+  const { error } = await supabase.from("scheduled_posts").update(patch).eq("id", scheduledId);
+  if (error) return { error: error.message };
+  await syncSchedule(supabase, contentId);
+  await reval(contentId);
+  revalidatePath("/dashboard/desk/social");
+  return { ok: true, message: res.ok ? "Published." : "Marked live (connect Meta for auto-publish)." };
+}

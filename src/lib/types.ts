@@ -241,6 +241,20 @@ export interface ContentVariant {
   created_at: string;
 }
 
+export interface ScheduledPost {
+  id: string;
+  content_id: string;
+  workspace_id: string;
+  platform: string;
+  scheduled_at: string;
+  status: "queued" | "published" | "canceled" | "failed";
+  first_comment: string | null;
+  utm: string | null;
+  external_id: string | null;
+  published_at: string | null;
+  created_at: string;
+}
+
 export interface ContentPillar {
   id: string;
   workspace_id: string;
