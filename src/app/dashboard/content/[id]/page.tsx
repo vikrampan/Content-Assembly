@@ -9,6 +9,7 @@ import { QA_FIREWALL } from "@/lib/mendly/pipeline";
 import { AssignPanel } from "./AssignPanel";
 import { ContentEditor } from "./ContentEditor";
 import { CopyStudio } from "./CopyStudio";
+import { SuggestionThread } from "./SuggestionThread";
 import { QaFirewall } from "./QaFirewall";
 import { Deliverables, type DeliverableView } from "./Deliverables";
 import { Scheduler } from "./Scheduler";
@@ -59,6 +60,8 @@ export default async function ContentDetailPage({
   const variants = (variantRows as ContentVariant[]) ?? [];
   const brandGroups = (checklistRow as { groups: QaGroup[] } | null)?.groups ?? [];
   const checklist = brandGroups.length > 0 ? brandGroups : (QA_FIREWALL as QaGroup[]);
+  const { data: { user: me } } = await supabase.auth.getUser();
+  const meId = me?.id ?? null;
 
   const deliverables: DeliverableView[] = await Promise.all(
     assets.map(async (a) => {
@@ -86,17 +89,8 @@ export default async function ContentDetailPage({
         {ws ? <p className="text-sm" style={{ color: "var(--muted)" }}>{ws.name}</p> : null}
       </div>
 
-      {/* Client suggestions from the calendar review, surfaced to the desks. */}
-      {suggestions.length > 0 ? (
-        <section className="card p-4" style={{ borderColor: "var(--accent)" }}>
-          <h2 className="mb-2 text-sm font-semibold" style={{ color: "var(--accent-ink)" }}>Client suggestions</h2>
-          <div className="space-y-2">
-            {suggestions.map((c) => (
-              <div key={c.id} className="rounded-lg px-3 py-2 text-sm" style={{ background: "var(--accent-soft)" }}>{c.body}</div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {/* Two-way client conversation (surfaced from the portal). */}
+      <SuggestionThread contentId={item.id} messages={suggestions.map((c) => ({ id: c.id, body: c.body, mine: c.author_id === meId }))} />
 
       {/* Pipeline routing / hand-off. */}
       <AssignPanel contentId={item.id} stage={item.stage} note={item.assignment_note} fn={session.fn} />

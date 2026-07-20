@@ -1,12 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CalendarApproval, ContentItem, PostMetric, Workspace } from "@/lib/types";
-import { PostApproval } from "./PostApproval";
+import { ClientPostCard, type Creative, type ThreadMsg, type Variant } from "./ClientPostCard";
 import { CalendarApproval as CalendarApprovalControl } from "./CalendarApproval";
 import { CalendarPostChip } from "./CalendarPostChip";
 import { ClientAnalytics } from "./ClientAnalytics";
+import { UpcomingSchedule, type UpcomingEntry } from "./UpcomingSchedule";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const CV_IMG = /\.(png|jpe?g|gif|webp|avif)$/i;
+const CV_VID = /\.(mp4|mov|webm|m4v)$/i;
 
 function Kpi({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
   return (
@@ -98,6 +101,43 @@ export async function ClientPortal() {
     }
   }
 
+  // Enrich the posts awaiting review with their creative, platform copy, and
+  // the conversation thread — so clients approve the actual thing, not just text.
+  const { data: { user: me } } = await supabase.auth.getUser();
+  const meId = me?.id ?? null;
+  const reviewIds = pending.map((p) => p.id);
+  const creativesBy = new Map<string, Creative[]>();
+  const variantsBy = new Map<string, Variant[]>();
+  const threadBy = new Map<string, ThreadMsg[]>();
+  if (reviewIds.length > 0) {
+    const [{ data: aRows }, { data: vRows }, { data: cRows }] = await Promise.all([
+      supabase.from("assets").select("content_id, storage_path, kind").in("content_id", reviewIds).in("kind", ["final", "raw", "generated"]),
+      supabase.from("content_variants").select("content_id, platform, body").in("content_id", reviewIds),
+      supabase.from("comments").select("id, content_id, body, author_id, created_at").eq("internal", false).in("content_id", reviewIds).order("created_at"),
+    ]);
+    for (const a of (aRows as { content_id: string; storage_path: string }[]) ?? []) {
+      if (!CV_IMG.test(a.storage_path) && !CV_VID.test(a.storage_path)) continue;
+      const { data } = await supabase.storage.from("assets").createSignedUrl(a.storage_path, 3600);
+      if (!data?.signedUrl) continue;
+      const list = creativesBy.get(a.content_id) ?? [];
+      list.push({ url: data.signedUrl, isVideo: CV_VID.test(a.storage_path) });
+      creativesBy.set(a.content_id, list);
+    }
+    for (const v of (vRows as { content_id: string; platform: string; body: string }[]) ?? []) {
+      const l = variantsBy.get(v.content_id) ?? []; l.push({ platform: v.platform, body: v.body }); variantsBy.set(v.content_id, l);
+    }
+    for (const c of (cRows as { id: string; content_id: string; body: string; author_id: string | null; created_at: string }[]) ?? []) {
+      const l = threadBy.get(c.content_id) ?? []; l.push({ id: c.id, body: c.body, mine: c.author_id === meId, at: c.created_at }); threadBy.set(c.content_id, l);
+    }
+  }
+
+  // Upcoming publish schedule (client can read its own).
+  const { data: schedRows } = await supabase
+    .from("scheduled_posts").select("id, platform, scheduled_at, status, content_items(title)")
+    .order("scheduled_at").limit(50);
+  const upcoming: UpcomingEntry[] = ((schedRows as { id: string; platform: string; scheduled_at: string; status: string; content_items: { title: string } | null }[] | null) ?? [])
+    .map((r) => ({ id: r.id, platform: r.platform, scheduled_at: r.scheduled_at, status: r.status, title: r.content_items?.title ?? "Post" }));
+
   // Bucket planned posts by day-of-month for the calendar grid.
   const byDay = new Map<number, ContentItem[]>();
   for (const c of calendar) {
@@ -162,7 +202,7 @@ export async function ClientPortal() {
         ) : (
           <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))" }}>
             {pending.map((p) => (
-              <PostApproval
+              <ClientPostCard
                 key={p.id}
                 contentId={p.id}
                 title={p.title}
@@ -172,6 +212,9 @@ export async function ClientPortal() {
                 format={p.format}
                 plannedDate={p.planned_date}
                 accent={accent}
+                creatives={creativesBy.get(p.id) ?? []}
+                variants={variantsBy.get(p.id) ?? []}
+                thread={threadBy.get(p.id) ?? []}
               />
             ))}
           </div>
@@ -253,6 +296,9 @@ export async function ClientPortal() {
           </div>
         </section>
       ) : null}
+
+      {/* Going live — the upcoming publish schedule */}
+      <UpcomingSchedule entries={upcoming} accent={accent} />
 
       {/* Analytics */}
       <ClientAnalytics metrics={metrics} posts={approved} accent={accentReadable} />
