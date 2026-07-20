@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { ContentItem, Workspace } from "@/lib/types";
+import type { ContentItem, ContentPillar, Workspace } from "@/lib/types";
 import { OBJECTIVE_LABELS, type Medium, type Objective } from "@/lib/mendly/strategy";
 import { createPlannedPost, reschedule } from "./actions";
 
@@ -17,11 +17,14 @@ const iso = (y: number, m: number, d: number) =>
 export function Calendar({
   workspaces,
   items,
+  pillars,
 }: {
   workspaces: Workspace[];
   items: ContentItem[];
+  pillars: ContentPillar[];
 }) {
   const today = new Date();
+  const pillarColor = useMemo(() => new Map(pillars.map((p) => [p.id, p.color])), [pillars]);
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-11
   const [addDate, setAddDate] = useState<string | null>(null);
@@ -107,6 +110,7 @@ export function Calendar({
                     draggable
                     onDragStart={() => setDragId(it.id)}
                     className="block cursor-grab truncate rounded-md border border-black/10 bg-white px-1.5 py-1 text-[11px] leading-tight active:cursor-grabbing dark:border-white/10 dark:bg-white/10"
+                    style={it.pillar_id && pillarColor.get(it.pillar_id) ? { borderLeft: `3px solid #${pillarColor.get(it.pillar_id)}` } : undefined}
                     title={`${it.title} · ${wsName.get(it.workspace_id) ?? ""}`}
                   >
                     <span className="opacity-45">{it.format[0].toUpperCase()}</span> {it.title}
@@ -121,6 +125,7 @@ export function Calendar({
       {addDate ? (
         <AddForm
           workspaces={workspaces}
+          pillars={pillars}
           date={addDate}
           pending={pending}
           onClose={() => setAddDate(null)}
@@ -137,18 +142,21 @@ export function Calendar({
 }
 
 function AddForm({
-  workspaces, date, pending, onClose, onCreate,
+  workspaces, pillars, date, pending, onClose, onCreate,
 }: {
   workspaces: Workspace[];
+  pillars: ContentPillar[];
   date: string;
   pending: boolean;
   onClose: () => void;
-  onCreate: (p: { workspaceId: string; title: string; objective: Objective; medium: Medium; date: string }) => void;
+  onCreate: (p: { workspaceId: string; title: string; objective: Objective; medium: Medium; date: string; pillarId: string | null }) => void;
 }) {
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState<Objective>("launch");
   const [medium, setMedium] = useState<Medium>("post");
+  const [pillarId, setPillarId] = useState("");
+  const myPillars = pillars.filter((p) => p.workspace_id === workspaceId);
 
   return (
     <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
@@ -175,9 +183,17 @@ function AddForm({
             <option value="post">Post</option><option value="reel">Reel</option>
           </select>
         </label>
+        {myPillars.length > 0 ? (
+          <label className="block text-xs"><span className="mb-1 block opacity-70">Pillar</span>
+            <select className={inputCls} value={pillarId} onChange={(e) => setPillarId(e.target.value)}>
+              <option value="">— none —</option>
+              {myPillars.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+        ) : null}
       </div>
       <button
-        onClick={() => onCreate({ workspaceId, title, objective, medium, date })}
+        onClick={() => onCreate({ workspaceId, title, objective, medium, date, pillarId: pillarId || null })}
         disabled={pending || !title.trim() || !workspaceId}
         className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-700 disabled:opacity-50"
       >

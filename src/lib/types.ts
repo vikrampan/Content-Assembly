@@ -182,6 +182,19 @@ export interface ContentItem {
   scheduled_at: string | null;
   qa_notes: Record<string, string> | null;
   qa_reject_reasons: string | null;
+  pillar_id: string | null;
+  campaign: string | null;
+}
+
+export interface ContentPillar {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  sort: number;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface Asset {

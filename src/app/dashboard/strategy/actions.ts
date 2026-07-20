@@ -149,3 +149,109 @@ export async function runStrategyDesk(input: {
     provider: copy.provider,
   };
 }
+
+// ===========================================================================
+// Strategy / Monthly Plan desk (0017) — pillars + AI month planner.
+// ===========================================================================
+import type { ContentPillar } from "@/lib/types";
+import { planMonth, type PlannedPost } from "@/lib/ai/planner";
+
+async function requireStrategist() {
+  const session = await requireSession();
+  if (session.role === "client") throw new Error("Not authorized.");
+  return session;
+}
+
+export async function createPillar(input: { workspaceId: string; name: string; description?: string; color?: string }): Promise<{ ok: true } | { error: string }> {
+  const session = await requireStrategist();
+  const name = input.name.trim();
+  if (!name) return { error: "Name the pillar." };
+  const supabase = await createClient();
+  const { count } = await supabase.from("content_pillars").select("id", { count: "exact", head: true }).eq("workspace_id", input.workspaceId);
+  const { error } = await supabase.from("content_pillars").insert({
+    workspace_id: input.workspaceId, name, description: input.description?.trim() || null,
+    color: (input.color ?? "").replace(/^#/, "") || null, sort: count ?? 0, created_by: session.userId,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/strategy");
+  return { ok: true };
+}
+
+export async function deletePillar(pillarId: string): Promise<{ ok: true } | { error: string }> {
+  await requireStrategist();
+  const supabase = await createClient();
+  const { error } = await supabase.from("content_pillars").delete().eq("id", pillarId);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/strategy");
+  return { ok: true };
+}
+
+/** Draft a whole month (not persisted) — returns a reviewable plan. */
+export async function generateMonthPlan(input: {
+  workspaceId: string; year: number; month: number; count: number; goals?: string;
+}): Promise<{ ok: true; posts: PlannedPost[]; provider: string } | { error: string }> {
+  await requireStrategist();
+  const supabase = await createClient();
+  const { data: ws } = await supabase.from("workspaces").select("*").eq("id", input.workspaceId).single<Workspace>();
+  if (!ws) return { error: "Brand not found." };
+  const { data: pillarRows } = await supabase.from("content_pillars").select("name, description").eq("workspace_id", input.workspaceId).order("sort");
+  const pillars = (pillarRows as { name: string; description: string | null }[]) ?? [];
+
+  const res = await planMonth(ws, { year: input.year, month: input.month, count: Math.max(1, Math.min(40, input.count)), pillars, goals: input.goals });
+  if (res.provider === "stub") return { error: "Month planning needs ANTHROPIC_API_KEY on the server." };
+  if (res.posts.length === 0) return { error: "Couldn't draft a plan — try again." };
+
+  // Normalise each post's pillar to a canonical pillar name (Claude sometimes
+  // echoes "Name: description"), so the review dropdown + commit map cleanly.
+  const names = pillars.map((p) => p.name);
+  const canon = (raw: string | null): string | null => {
+    if (!raw) return null;
+    const low = raw.toLowerCase();
+    return names.find((n) => n.toLowerCase() === low)
+      ?? names.find((n) => low.includes(n.toLowerCase()) || n.toLowerCase().includes(low))
+      ?? null;
+  };
+  const posts = res.posts.map((p) => ({ ...p, pillar: canon(p.pillar) }));
+  return { ok: true, posts, provider: res.provider };
+}
+
+/** Commit a reviewed month plan — creates every post on the calendar/pipeline. */
+export async function commitMonthPlan(input: {
+  workspaceId: string; year: number; month: number; campaign?: string;
+  posts: { day: number; title: string; objective: Objective; medium: Medium; pillar: string | null; hook: string }[];
+}): Promise<{ ok: true; created: number } | { error: string }> {
+  const session = await requireStrategist();
+  if (input.posts.length === 0) return { error: "Nothing to commit." };
+  const supabase = await createClient();
+
+  // Map pillar names → ids for this brand.
+  const { data: pillarRows } = await supabase.from("content_pillars").select("id, name").eq("workspace_id", input.workspaceId);
+  const pillarId = new Map(((pillarRows as ContentPillar[]) ?? []).map((p) => [p.name.toLowerCase(), p.id]));
+
+  const rows = input.posts.map((p) => {
+    const decision = decideFormat(p.objective, p.medium);
+    const date = `${input.year}-${String(input.month + 1).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+    return {
+      workspace_id: input.workspaceId,
+      title: p.title.trim() || "Untitled post",
+      format: decision.dbFormat,
+      status: "ideation",
+      stage: "planning",
+      objective: p.objective,
+      format_type: decision.formatType,
+      format_rationale: decision.rationale,
+      hook: p.hook?.trim() || null,
+      planned_date: date,
+      pillar_id: p.pillar ? pillarId.get(p.pillar.toLowerCase()) ?? null : null,
+      campaign: input.campaign?.trim() || null,
+      created_by: session.userId,
+    };
+  });
+
+  const { error } = await supabase.from("content_items").insert(rows);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/calendar");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/strategy");
+  return { ok: true, created: rows.length };
+}

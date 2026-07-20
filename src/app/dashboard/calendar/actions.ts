@@ -14,6 +14,7 @@ export async function createPlannedPost(input: {
   objective: Objective;
   medium: Medium;
   date: string; // YYYY-MM-DD
+  pillarId?: string | null;
 }): Promise<ActionResult> {
   const session = await requireSession();
   if (session.role === "client") return { error: "Not authorized." };
@@ -33,6 +34,7 @@ export async function createPlannedPost(input: {
     format_type: decision.formatType,
     format_rationale: decision.rationale,
     planned_date: input.date,
+    pillar_id: input.pillarId || null,
     created_by: session.userId,
   });
   if (error) return { error: error.message };

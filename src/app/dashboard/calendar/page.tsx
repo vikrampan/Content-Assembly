@@ -1,15 +1,16 @@
 import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { ContentItem, Workspace } from "@/lib/types";
+import type { ContentItem, ContentPillar, Workspace } from "@/lib/types";
 import { Calendar } from "./Calendar";
 
 export default async function CalendarPage() {
-  const session = await requireAccess("calendar");
+  await requireAccess("calendar");
 
   const supabase = await createClient();
-  const [{ data: ws }, { data: items }] = await Promise.all([
+  const [{ data: ws }, { data: items }, { data: pillars }] = await Promise.all([
     supabase.from("workspaces").select("*").order("name"),
     supabase.from("content_items").select("*").not("planned_date", "is", null),
+    supabase.from("content_pillars").select("*").order("sort"),
   ]);
 
   return (
@@ -21,7 +22,7 @@ export default async function CalendarPage() {
           worked, reviewed, and shipped. Drag to reschedule.
         </p>
       </div>
-      <Calendar workspaces={(ws as Workspace[]) ?? []} items={(items as ContentItem[]) ?? []} />
+      <Calendar workspaces={(ws as Workspace[]) ?? []} items={(items as ContentItem[]) ?? []} pillars={(pillars as ContentPillar[]) ?? []} />
     </div>
   );
 }
