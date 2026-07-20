@@ -52,6 +52,70 @@ export interface Workspace {
   palette: { hex: string; name?: string }[] | null;
   logo_rules: string | null;
   logo_path: string | null;
+  // 0015 — structured brand book + lifecycle
+  brand_book: BrandBook | null;
+  brand_status: "draft" | "locked";
+  locked_at: string | null;
+  locked_by: string | null;
+}
+
+/**
+ * The structured long-tail of the brand book (the typed columns above hold the
+ * canonical colours / fonts / voice / do-never that the copy desk & QA read;
+ * this holds everything else). The AI importer fills both.
+ */
+export interface BrandBook {
+  identity?: {
+    tagline?: string;
+    mission?: string;
+    vision?: string;
+    values?: string[];
+    positioning?: string;
+    story?: string;
+    audience?: string;
+    competitors?: string;
+  };
+  voice?: {
+    attributes?: string[];
+    mechanics?: string; // capitalisation, Oxford comma, emoji policy, reading level
+    examples_good?: string[];
+    examples_bad?: string[];
+  };
+  messaging?: {
+    value_props?: string[];
+    boilerplate?: string;
+    elevator_pitch?: string;
+    key_messages?: string[];
+  };
+  imagery?: {
+    photography?: string;
+    illustration?: string;
+    iconography?: string;
+    patterns?: string;
+  };
+  social?: {
+    bio?: string;
+    handle?: string;
+    hashtags?: string[];
+    emoji_policy?: string;
+  };
+  legal?: {
+    claims_needing_proof?: string;
+    disclaimers?: string;
+    trademark?: string;
+    compliance?: string;
+  };
+  type_scale?: { name: string; size?: string; weight?: string }[];
+}
+
+export interface BrandBookVersion {
+  id: string;
+  workspace_id: string;
+  snapshot: Record<string, unknown>;
+  note: string | null;
+  source: string | null;
+  author_id: string | null;
+  created_at: string;
 }
 
 export type AssetKindExt = AssetKind | "logo" | "font" | "brand";

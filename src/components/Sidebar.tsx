@@ -47,12 +47,14 @@ function Icon({ label }: { label: string }) {
 export function Sidebar({
   nav,
   brandName,
+  logoUrl,
   userName,
   role,
   initials,
 }: {
   nav: NavEntry[];
   brandName: string;
+  logoUrl?: string | null;
   userName: string;
   role: string;
   initials: string;
@@ -79,10 +81,17 @@ export function Sidebar({
 
       <aside className={`side ${open ? "open" : ""}`}>
         <div className="side-brand">
-          <span className="side-mark">M</span>
+          {logoUrl ? (
+            <span className="side-mark" style={{ background: "#fff", padding: 5 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoUrl} alt={brandName} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+            </span>
+          ) : (
+            <span className="side-mark">M</span>
+          )}
           <div>
-            <div style={{ fontFamily: "var(--serif)", fontSize: "1.05rem", fontWeight: 700, lineHeight: 1.1 }}>Mendly OS</div>
-            <div style={{ fontSize: ".66rem", letterSpacing: ".12em", textTransform: "uppercase", color: "var(--side-muted)" }}>{brandName}</div>
+            <div style={{ fontFamily: "var(--serif)", fontSize: "1.05rem", fontWeight: 700, lineHeight: 1.1 }}>{logoUrl ? brandName : "Mendly OS"}</div>
+            <div style={{ fontSize: ".66rem", letterSpacing: ".12em", textTransform: "uppercase", color: "var(--side-muted)" }}>{logoUrl ? "Brand Portal" : brandName}</div>
           </div>
         </div>
 

@@ -254,3 +254,154 @@ export async function deleteBrandAsset(assetId: string): Promise<ActionResult> {
   revalidatePath(`/dashboard/brands/${a.workspace_id}`);
   return { ok: true };
 }
+
+// ===========================================================================
+// Brand Designer — AI Import + structured book + lock/versioning (0015).
+// ===========================================================================
+import type { BrandBook, BrandBookVersion, Workspace } from "@/lib/types";
+import { extractBrandBook, type BrandDraft, type SourceDoc } from "@/lib/ai/brandExtract";
+
+// Columns that make up a full brand-book snapshot (for history / restore).
+const BRAND_COLS =
+  "name,slug,primary_hex,secondary_hex,accent_hex,palette,headline_font,body_font,voice_tone,voice_never,photography_style,do_rules,never_rules,locations,logo_rules,logo_path,ai_style_suffix,brand_book,brand_status";
+
+async function snapshotBrand(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string,
+  authorId: string,
+  note: string,
+  source: string,
+) {
+  const { data } = await supabase.from("workspaces").select(BRAND_COLS).eq("id", workspaceId).single();
+  if (!data) return;
+  await supabase.from("brand_book_versions").insert({
+    workspace_id: workspaceId,
+    snapshot: data,
+    note,
+    source,
+    author_id: authorId,
+  });
+}
+
+const MEDIA: Record<string, string> = {
+  pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+  webp: "image/webp", gif: "image/gif", txt: "text/plain", md: "text/plain",
+};
+
+/** Download uploaded source docs from storage and run the AI extractor. */
+export async function extractBrandFromAssets(
+  workspaceId: string,
+  storagePaths: string[],
+): Promise<{ ok: true; draft: BrandDraft; skipped: string[] } | { error: string }> {
+  await requireBrandEditor();
+  const supabase = await createClient();
+
+  const docs: SourceDoc[] = [];
+  const skipped: string[] = [];
+  for (const path of storagePaths.slice(0, 5)) {
+    const ext = (path.split(".").pop() ?? "").toLowerCase();
+    const media = MEDIA[ext];
+    if (!media) { skipped.push(path.split("/").pop() ?? path); continue; }
+    const { data, error } = await supabase.storage.from("assets").download(path);
+    if (error || !data) { skipped.push(path.split("/").pop() ?? path); continue; }
+    const buf = Buffer.from(await data.arrayBuffer());
+    docs.push({
+      media_type: media,
+      data: media.startsWith("text/") ? buf.toString("utf-8") : buf.toString("base64"),
+      name: path.split("/").pop() ?? "document",
+    });
+  }
+  if (docs.length === 0) return { error: "No readable documents (supported: PDF, PNG/JPG, TXT)." };
+
+  const draft = await extractBrandBook(docs);
+  if (draft.provider === "stub") {
+    return { error: "AI import needs ANTHROPIC_API_KEY set on the server. You can still fill the book manually." };
+  }
+  return { ok: true, draft, skipped };
+}
+
+/** Apply a reviewed AI draft: snapshot the current book, then write the fields. */
+export async function applyBrandImport(
+  workspaceId: string,
+  fields: Record<string, unknown>,
+  brand_book: BrandBook,
+  sourceName: string,
+): Promise<ActionResult> {
+  const session = await requireBrandEditor();
+  const supabase = await createClient();
+
+  await snapshotBrand(supabase, workspaceId, session.userId, `Before AI import (${sourceName})`, "ai_import");
+
+  // Merge the AI brand_book sections over whatever exists.
+  const { data: cur } = await supabase.from("workspaces").select("brand_book").eq("id", workspaceId).single<{ brand_book: BrandBook | null }>();
+  const merged: BrandBook = { ...(cur?.brand_book ?? {}), ...brand_book };
+
+  const clean: Record<string, unknown> = { brand_book: merged };
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined || v === null || v === "") continue;
+    clean[k] = v;
+  }
+
+  const { error } = await supabase.from("workspaces").update(clean).eq("id", workspaceId);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/brands/${workspaceId}`);
+  return { ok: true };
+}
+
+/** Save an edited structured brand-book section (manual mode). */
+export async function saveBrandBook(workspaceId: string, brand_book: BrandBook): Promise<ActionResult> {
+  const session = await requireBrandEditor();
+  const supabase = await createClient();
+  await snapshotBrand(supabase, workspaceId, session.userId, "Manual edit", "manual");
+  const { error } = await supabase.from("workspaces").update({ brand_book }).eq("id", workspaceId);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/brands/${workspaceId}`);
+  return { ok: true };
+}
+
+/** Lock / unlock the brand book. Locking gates production and is versioned. */
+export async function setBrandLock(workspaceId: string, locked: boolean): Promise<ActionResult> {
+  const session = await requireBrandEditor();
+  const supabase = await createClient();
+  if (locked) await snapshotBrand(supabase, workspaceId, session.userId, "Locked", "lock");
+  const { error } = await supabase
+    .from("workspaces")
+    .update({
+      brand_status: locked ? "locked" : "draft",
+      locked_at: locked ? new Date().toISOString() : null,
+      locked_by: locked ? session.userId : null,
+    })
+    .eq("id", workspaceId);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/brands/${workspaceId}`);
+  return { ok: true };
+}
+
+/** Restore a previous brand-book version (snapshots current first). */
+export async function restoreBrandVersion(versionId: string): Promise<ActionResult> {
+  const session = await requireBrandEditor();
+  const supabase = await createClient();
+  const { data: v } = await supabase
+    .from("brand_book_versions")
+    .select("*")
+    .eq("id", versionId)
+    .single<BrandBookVersion>();
+  if (!v) return { error: "Version not found." };
+
+  await snapshotBrand(supabase, v.workspace_id, session.userId, "Before restore", "restore");
+
+  // Only write back the brand columns present in the snapshot.
+  const snap = v.snapshot as Partial<Workspace>;
+  const writable: (keyof Workspace)[] = [
+    "primary_hex", "secondary_hex", "accent_hex", "palette", "headline_font", "body_font",
+    "voice_tone", "voice_never", "photography_style", "do_rules", "never_rules", "locations",
+    "logo_rules", "logo_path", "ai_style_suffix", "brand_book",
+  ];
+  const patch: Record<string, unknown> = {};
+  for (const k of writable) if (k in snap) patch[k] = snap[k];
+
+  const { error } = await supabase.from("workspaces").update(patch).eq("id", v.workspace_id);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/brands/${v.workspace_id}`);
+  return { ok: true };
+}

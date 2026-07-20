@@ -41,6 +41,27 @@ export async function ClientPortal() {
     );
   }
 
+  // Brand logo + uploaded fonts → render the portal in the client's identity.
+  let logoUrl: string | null = null;
+  if (ws.logo_path) {
+    const { data: signed } = await supabase.storage.from("assets").createSignedUrl(ws.logo_path, 3600);
+    logoUrl = signed?.signedUrl ?? null;
+  }
+  const { data: fontRows } = await supabase
+    .from("assets").select("storage_path").eq("workspace_id", ws.id).eq("kind", "font").order("created_at");
+  const fontPaths = (fontRows as { storage_path: string }[] | null) ?? [];
+  const fontFaces: string[] = [];
+  const fmt = (p: string) => (/\.woff2$/i.test(p) ? "woff2" : /\.woff$/i.test(p) ? "woff" : /\.otf$/i.test(p) ? "opentype" : "truetype");
+  if (fontPaths[0] && ws.headline_font) {
+    const { data } = await supabase.storage.from("assets").createSignedUrl(fontPaths[0].storage_path, 3600);
+    if (data?.signedUrl) fontFaces.push(`@font-face{font-family:"${ws.headline_font}";src:url("${data.signedUrl}") format("${fmt(fontPaths[0].storage_path)}");font-display:swap}`);
+  }
+  if (fontPaths[1] && ws.body_font) {
+    const { data } = await supabase.storage.from("assets").createSignedUrl(fontPaths[1].storage_path, 3600);
+    if (data?.signedUrl) fontFaces.push(`@font-face{font-family:"${ws.body_font}";src:url("${data.signedUrl}") format("${fmt(fontPaths[1].storage_path)}");font-display:swap}`);
+  }
+  const headlineFamily = ws.headline_font ? `"${ws.headline_font}", var(--serif)` : "var(--serif)";
+
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -96,17 +117,25 @@ export async function ClientPortal() {
 
   return (
     <div className="space-y-8" style={{ ["--brand" as string]: accent }}>
+      {fontFaces.length > 0 ? <style dangerouslySetInnerHTML={{ __html: fontFaces.join("") }} /> : null}
       {/* Brand hero */}
       <header className="card overflow-hidden">
         <div className="h-1.5" style={{ background: accent }} />
         <div className="flex flex-wrap items-center gap-4 p-6">
-          <span className="flex h-12 w-12 shrink-0 overflow-hidden rounded-xl" style={{ border: "1px solid var(--line)" }}>
-            <span className="h-full w-1/2" style={{ background: accent }} />
-            <span className="h-full w-1/2" style={{ background: ws.secondary_hex ? `#${ws.secondary_hex}` : "var(--panel-2)" }} />
-          </span>
+          {logoUrl ? (
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl p-1.5" style={{ border: "1px solid var(--line)", background: "var(--panel-2)" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoUrl} alt={`${ws.name} logo`} className="max-h-full max-w-full object-contain" />
+            </span>
+          ) : (
+            <span className="flex h-12 w-12 shrink-0 overflow-hidden rounded-xl" style={{ border: "1px solid var(--line)" }}>
+              <span className="h-full w-1/2" style={{ background: accent }} />
+              <span className="h-full w-1/2" style={{ background: ws.secondary_hex ? `#${ws.secondary_hex}` : "var(--panel-2)" }} />
+            </span>
+          )}
           <div>
             <div className="text-xs uppercase tracking-wide" style={{ color: "var(--faint)" }}>Welcome back</div>
-            <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--serif)", letterSpacing: "-.01em" }}>{ws.name}</h1>
+            <h1 className="text-2xl font-bold" style={{ fontFamily: headlineFamily, letterSpacing: "-.01em" }}>{ws.name}</h1>
           </div>
         </div>
       </header>

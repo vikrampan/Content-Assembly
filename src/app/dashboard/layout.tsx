@@ -37,10 +37,15 @@ export default async function DashboardLayout({
 
   // The sidebar subtitle: clients see their brand; staff see their desk label.
   let subtitle = FN_LABEL[fn] ?? "Workspace";
+  let logoUrl: string | null = null;
   if (fn === "client") {
     const supabase = await createClient();
-    const { data: ws } = await supabase.from("workspaces").select("name").limit(1).maybeSingle<{ name: string }>();
+    const { data: ws } = await supabase.from("workspaces").select("name,logo_path").limit(1).maybeSingle<{ name: string; logo_path: string | null }>();
     if (ws?.name) subtitle = ws.name;
+    if (ws?.logo_path) {
+      const { data: signed } = await supabase.storage.from("assets").createSignedUrl(ws.logo_path, 3600);
+      logoUrl = signed?.signedUrl ?? null;
+    }
   }
 
   return (
@@ -48,6 +53,7 @@ export default async function DashboardLayout({
       <Sidebar
         nav={nav}
         brandName={subtitle}
+        logoUrl={logoUrl}
         userName={displayName}
         role={FN_LABEL[fn] ?? fn}
         initials={initialsOf(displayName)}
