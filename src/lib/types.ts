@@ -190,6 +190,35 @@ export interface ContentItem {
   devices: string[];
   hook_options: HookCandidate[] | null;
   voice_flags: VoiceFlags | null;
+  qa_ai: QaAiResult | null;
+}
+
+export interface QaCheck { key: string; label: string; detail: string }
+export interface QaGroup { group: string; checks: QaCheck[] }
+
+export interface QaChecklist {
+  workspace_id: string;
+  groups: QaGroup[];
+  ai_generated: boolean;
+  updated_at: string;
+}
+
+export interface QaAiResult {
+  overall: { verdict: "pass" | "flag"; summary: string };
+  checks: { key: string; verdict: "pass" | "flag"; finding: string }[];
+  ranAt: string;
+}
+
+export interface QaReview {
+  id: string;
+  content_id: string;
+  workspace_id: string;
+  reviewer_id: string | null;
+  result: "passed" | "rejected";
+  reasons: string | null;
+  passed: number;
+  total: number;
+  created_at: string;
 }
 
 export interface HookCandidate {

@@ -4,7 +4,8 @@ import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { STAGE_LABEL } from "@/lib/mendly/stages";
 import { OBJECTIVE_LABELS, type Objective } from "@/lib/mendly/strategy";
-import type { Asset, ContentItem, ContentVariant, ContentVersion, Comment, Workspace } from "@/lib/types";
+import type { Asset, ContentItem, ContentVariant, ContentVersion, Comment, QaGroup, Workspace } from "@/lib/types";
+import { QA_FIREWALL } from "@/lib/mendly/pipeline";
 import { AssignPanel } from "./AssignPanel";
 import { ContentEditor } from "./ContentEditor";
 import { CopyStudio } from "./CopyStudio";
@@ -42,18 +43,21 @@ export default async function ContentDetailPage({
     .single<ContentItem>();
   if (!item) notFound();
 
-  const [{ data: ws }, { data: versionRows }, { data: assetRows }, { data: commentRows }, { data: variantRows }] = await Promise.all([
+  const [{ data: ws }, { data: versionRows }, { data: assetRows }, { data: commentRows }, { data: variantRows }, { data: checklistRow }] = await Promise.all([
     supabase.from("workspaces").select("*").eq("id", item.workspace_id).single<Workspace>(),
     supabase.from("content_versions").select("*").eq("content_id", id).order("created_at", { ascending: false }).limit(20),
     supabase.from("assets").select("*").eq("content_id", id).order("created_at", { ascending: false }),
     supabase.from("comments").select("*").eq("content_id", id).eq("internal", false).order("created_at", { ascending: false }),
     supabase.from("content_variants").select("*").eq("content_id", id).order("platform"),
+    supabase.from("qa_checklists").select("groups").eq("workspace_id", item.workspace_id).maybeSingle<{ groups: QaGroup[] }>(),
   ]);
 
   const versions = (versionRows as ContentVersion[]) ?? [];
   const assets = (assetRows as Asset[]) ?? [];
   const suggestions = (commentRows as Comment[]) ?? [];
   const variants = (variantRows as ContentVariant[]) ?? [];
+  const brandGroups = (checklistRow as { groups: QaGroup[] } | null)?.groups ?? [];
+  const checklist = brandGroups.length > 0 ? brandGroups : (QA_FIREWALL as QaGroup[]);
 
   const deliverables: DeliverableView[] = await Promise.all(
     assets.map(async (a) => {
@@ -118,7 +122,7 @@ export default async function ContentDetailPage({
       <Deliverables contentId={item.id} workspaceId={item.workspace_id} items={deliverables} />
 
       {/* The firewall (Stage 06) — the gate to the client. */}
-      <QaFirewall contentId={item.id} stage={item.stage} initial={item.qa_checklist} initialNotes={item.qa_notes} />
+      <QaFirewall contentId={item.id} stage={item.stage} initial={item.qa_checklist} initialNotes={item.qa_notes} checklist={checklist} brandFirewall={brandGroups.length > 0} aiResult={item.qa_ai} />
 
       {/* Social scheduling (Stage 07). */}
       <Scheduler contentId={item.id} stage={item.stage} scheduledAt={item.scheduled_at} />

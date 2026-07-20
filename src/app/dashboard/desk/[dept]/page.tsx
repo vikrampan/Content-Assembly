@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getDepartment, DEPARTMENT_LABELS } from "@/lib/mendly/departments";
 import { deskStage, STAGE_LABEL } from "@/lib/mendly/stages";
 import type { AiPersona, ContentItem, Workspace } from "@/lib/types";
+import { QaDeskPanel, type QaAnalytics, type BrandFw } from "./QaDeskPanel";
 
 // Desks whose production tools depend on an external AI/service key you'll add
 // later. The seam is ready; this is the honest "awaiting integration" panel.
@@ -56,6 +57,34 @@ export default async function DeskPage({
       .in("stage", ["scheduling", "published"])
       .order("scheduled_at", { ascending: true, nullsFirst: false });
     queue = (q as ContentItem[]) ?? [];
+  }
+
+  // QA desk: analytics + per-brand firewall status.
+  let qaAnalytics: QaAnalytics | null = null;
+  let qaBrands: BrandFw[] = [];
+  if (d.key === "qa") {
+    const [{ data: reviews }, { data: checklists }] = await Promise.all([
+      supabase.from("qa_reviews").select("result, reasons").limit(1000),
+      supabase.from("qa_checklists").select("workspace_id"),
+    ]);
+    const rows = (reviews as { result: string; reasons: string | null }[]) ?? [];
+    const passed = rows.filter((r) => r.result === "passed").length;
+    const rejected = rows.filter((r) => r.result === "rejected").length;
+    const reasonCounts = new Map<string, number>();
+    for (const r of rows) {
+      if (r.result !== "rejected" || !r.reasons) continue;
+      for (const part of r.reasons.split("—")[0].split(",").map((s) => s.trim()).filter(Boolean)) {
+        reasonCounts.set(part, (reasonCounts.get(part) ?? 0) + 1);
+      }
+    }
+    qaAnalytics = {
+      total: rows.length, passed, rejected,
+      firstPassRate: rows.length ? Math.round((passed / rows.length) * 100) : 0,
+      topReasons: [...reasonCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([reason, count]) => ({ reason, count })),
+    };
+    const hasCl = new Set(((checklists as { workspace_id: string }[]) ?? []).map((c) => c.workspace_id));
+    const { data: allWs } = await supabase.from("workspaces").select("id, name").order("name");
+    qaBrands = ((allWs as { id: string; name: string }[]) ?? []).map((w) => ({ id: w.id, name: w.name, hasChecklist: hasCl.has(w.id) }));
   }
 
   const awaiting = AWAITING[d.key];
@@ -115,6 +144,9 @@ export default async function DeskPage({
           </div>
         )}
       </section>
+
+      {/* QA desk — analytics + brand firewalls */}
+      {d.key === "qa" && qaAnalytics ? <QaDeskPanel analytics={qaAnalytics} brands={qaBrands} /> : null}
 
       {/* Social publish queue */}
       {d.key === "social" ? (

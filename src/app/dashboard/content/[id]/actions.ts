@@ -368,11 +368,13 @@ export async function sendBackFromQa(
 
   const supabase = await createClient();
   const composed = [reasons.join(", "), note.trim()].filter(Boolean).join(" — ");
+  const { data: item } = await supabase.from("content_items").select("workspace_id").eq("id", contentId).single<{ workspace_id: string }>();
   const { error } = await supabase
     .from("content_items")
     .update({ stage: "production", assignment_note: `QA rejected: ${composed}`, qa_reject_reasons: reasons.join(",") })
     .eq("id", contentId);
   if (error) return { error: error.message };
+  if (item) await supabase.from("qa_reviews").insert({ content_id: contentId, workspace_id: item.workspace_id, reviewer_id: session.userId, result: "rejected", reasons: composed });
   await reval(contentId);
   return { ok: true, message: "Sent back to Production for rework." };
 }
@@ -421,11 +423,6 @@ export async function submitForClientReview(
   const session = await requireSession();
   if (session.role === "client") return { error: "Not authorized." };
 
-  const failed = QA_KEYS.filter((k) => checklist[k] !== true);
-  if (failed.length > 0) {
-    return { error: `${failed.length} firewall check(s) still failing — cannot ship.` };
-  }
-
   const supabase = await createClient();
   const { data: item } = await supabase
     .from("content_items")
@@ -435,11 +432,21 @@ export async function submitForClientReview(
   if (!item) return { error: "Content not found or not accessible." };
   if (item.stage !== "qa") return { error: "This card isn't on the QA stage." };
 
+  // Validate against THIS brand's firewall (or the default if none generated).
+  const { data: cl } = await supabase.from("qa_checklists").select("groups").eq("workspace_id", item.workspace_id).maybeSingle<{ groups: { checks: { key: string }[] }[] }>();
+  const requiredKeys = cl?.groups?.length ? cl.groups.flatMap((g) => g.checks.map((c) => c.key)) : QA_KEYS;
+  const failed = requiredKeys.filter((k) => checklist[k] !== true);
+  if (failed.length > 0) {
+    return { error: `${failed.length} firewall check(s) still failing — cannot ship.` };
+  }
+
   const { error } = await supabase
     .from("content_items")
     .update({ stage: "client_review", qa_checklist: checklist })
     .eq("id", contentId);
   if (error) return { error: error.message };
+
+  await supabase.from("qa_reviews").insert({ content_id: contentId, workspace_id: item.workspace_id, reviewer_id: session.userId, result: "passed", passed: requiredKeys.length, total: requiredKeys.length });
 
   // Best-effort: email the client that something needs their approval.
   await notifyClientReviewReady(item.workspace_id, item.title);
@@ -562,6 +569,59 @@ export async function deleteVariant(variantId: string, contentId: string): Promi
   const supabase = await createClient();
   const { error } = await supabase.from("content_variants").delete().eq("id", variantId);
   if (error) return { error: error.message };
+  await reval(contentId);
+  return { ok: true };
+}
+
+// ===========================================================================
+// QA desk (0019) — brand-specific firewall + AI review + review log.
+// ===========================================================================
+import { generateChecklist, runAiReview } from "@/lib/ai/qaReviewer";
+import type { QaGroup } from "@/lib/types";
+
+const QA_IMG = /\.(png|jpe?g|gif|webp|avif)$/i;
+
+/** Generate a brand-specific firewall from the brand book (admin/QA). */
+export async function generateBrandChecklist(workspaceId: string): Promise<{ ok: true; groups: QaGroup[] } | { error: string }> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const supabase = await createClient();
+  const { data: ws } = await supabase.from("workspaces").select("*").eq("id", workspaceId).single<Workspace>();
+  if (!ws) return { error: "Brand not found." };
+  const groups = await generateChecklist(ws);
+  if (groups.length === 0) return { error: "Firewall generation needs ANTHROPIC_API_KEY on the server." };
+  const { error } = await supabase.from("qa_checklists").upsert(
+    { workspace_id: workspaceId, groups, ai_generated: true, updated_by: session.userId, updated_at: new Date().toISOString() },
+    { onConflict: "workspace_id" },
+  );
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/desk/qa");
+  return { ok: true, groups };
+}
+
+/** Run the AI reviewer over the copy + deliverable images. */
+export async function runAiQa(contentId: string): Promise<{ ok: true } | { error: string }> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const ctx = await loadItemWs(contentId);
+  if (!ctx) return { error: "Not found." };
+
+  // Resolve the brand's checklist (or the default firewall).
+  const { data: cl } = await ctx.supabase.from("qa_checklists").select("groups").eq("workspace_id", ctx.item.workspace_id).maybeSingle<{ groups: QaGroup[] }>();
+  const groups = cl?.groups?.length ? cl.groups : QA_FIREWALL;
+
+  // Signed URLs for the deliverable images.
+  const { data: assetRows } = await ctx.supabase.from("assets").select("storage_path").eq("content_id", contentId);
+  const imgs: string[] = [];
+  for (const a of (assetRows as { storage_path: string }[]) ?? []) {
+    if (!QA_IMG.test(a.storage_path)) continue;
+    const { data } = await ctx.supabase.storage.from("assets").createSignedUrl(a.storage_path, 3600);
+    if (data?.signedUrl) imgs.push(data.signedUrl);
+  }
+
+  const result = await runAiReview(ctx.ws, ctx.item, groups, imgs);
+  if (!result) return { error: "AI review needs ANTHROPIC_API_KEY on the server." };
+  await ctx.supabase.from("content_items").update({ qa_ai: result }).eq("id", contentId);
   await reval(contentId);
   return { ok: true };
 }

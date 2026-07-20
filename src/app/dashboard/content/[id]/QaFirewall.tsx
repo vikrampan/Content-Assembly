@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { QA_FIREWALL, QA_CHECK_COUNT } from "@/lib/mendly/pipeline";
-import { saveQaChecklist, sendBackFromQa, submitForClientReview } from "./actions";
+import type { QaAiResult, QaGroup } from "@/lib/types";
+import { runAiQa, saveQaChecklist, sendBackFromQa, submitForClientReview } from "./actions";
 
 const REJECT_REASONS = [
   "Off-brand voice",
@@ -21,11 +21,17 @@ export function QaFirewall({
   stage,
   initial,
   initialNotes,
+  checklist,
+  brandFirewall,
+  aiResult,
 }: {
   contentId: string;
   stage: string;
   initial: Record<string, boolean> | null;
   initialNotes: Record<string, string> | null;
+  checklist: QaGroup[];
+  brandFirewall: boolean;
+  aiResult: QaAiResult | null;
 }) {
   const [checks, setChecks] = useState<Record<string, boolean>>(initial ?? {});
   const [notes, setNotes] = useState<Record<string, string>>(initialNotes ?? {});
@@ -37,11 +43,13 @@ export function QaFirewall({
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
+  const total = useMemo(() => checklist.reduce((n, g) => n + g.checks.length, 0), [checklist]);
+  const aiByKey = useMemo(() => new Map((aiResult?.checks ?? []).map((c) => [c.key, c])), [aiResult]);
   const passed = useMemo(
-    () => QA_FIREWALL.flatMap((g) => g.checks).filter((c) => checks[c.key] === true).length,
-    [checks],
+    () => checklist.flatMap((g) => g.checks).filter((c) => checks[c.key] === true).length,
+    [checks, checklist],
   );
-  const allPass = passed === QA_CHECK_COUNT;
+  const allPass = passed === total && total > 0;
   const onQaStage = stage === "qa";
   const canSubmit = allPass && onQaStage;
   const alreadyShipped = !onQaStage;
@@ -76,18 +84,42 @@ export function QaFirewall({
     });
   }
 
+  function runAi() {
+    setFeedback(null);
+    startTransition(async () => {
+      const res = await runAiQa(contentId);
+      if ("error" in res) setFeedback({ kind: "err", text: res.error });
+      else { setFeedback({ kind: "ok", text: "AI review complete." }); router.refresh(); }
+    });
+  }
+
   return (
     <section className="card p-4">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">QA Brand Firewall</h2>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>Nothing ships until every check passes.</p>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            {brandFirewall ? "This brand's own firewall — generated from its book." : "Default firewall — generate a brand-specific one on the QA desk."} Nothing ships until every check passes.
+          </p>
         </div>
-        <span className={`pill ${allPass ? "approved" : "pending"}`}>{passed}/{QA_CHECK_COUNT} passed</span>
+        <div className="flex items-center gap-2">
+          {!alreadyShipped ? (
+            <button type="button" onClick={runAi} disabled={pending} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--ink)" }}>
+              {pending ? "…" : "✦ AI review"}
+            </button>
+          ) : null}
+          <span className={`pill ${allPass ? "approved" : "pending"}`}>{passed}/{total} passed</span>
+        </div>
       </div>
 
+      {aiResult ? (
+        <div className="mb-3 rounded-lg px-3 py-2 text-xs" style={aiResult.overall.verdict === "pass" ? { background: "var(--good-soft)", color: "var(--good)" } : { background: "rgba(192,85,63,.10)", color: "var(--danger)" }}>
+          <b>AI review: {aiResult.overall.verdict === "pass" ? "looks shippable" : "issues found"}.</b> {aiResult.overall.summary}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2">
-        {QA_FIREWALL.map((group) => (
+        {checklist.map((group) => (
           <div key={group.group}>
             <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>{group.group}</div>
             <div className="space-y-1">
@@ -103,7 +135,13 @@ export function QaFirewall({
                     />
                     <span className="flex-1 text-xs">
                       <span className="font-medium">{c.label}</span>
+                      {aiByKey.has(c.key) ? (
+                        <span className="ml-1.5 rounded px-1 py-0.5 text-[9px] font-bold uppercase" style={aiByKey.get(c.key)!.verdict === "pass" ? { background: "var(--good-soft)", color: "var(--good)" } : { background: "rgba(192,85,63,.14)", color: "var(--danger)" }}>AI {aiByKey.get(c.key)!.verdict}</span>
+                      ) : null}
                       <span className="block" style={{ color: "var(--muted)" }}>{c.detail}</span>
+                      {aiByKey.get(c.key)?.verdict === "flag" ? (
+                        <span className="mt-0.5 block" style={{ color: "var(--danger)" }}>⚠ {aiByKey.get(c.key)!.finding}</span>
+                      ) : null}
                     </span>
                     {!alreadyShipped ? (
                       <button
@@ -168,7 +206,7 @@ export function QaFirewall({
           <button type="button" onClick={save} disabled={pending} className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>Save progress</button>
           <button type="button" onClick={submit} disabled={pending || !canSubmit} title={canSubmit ? undefined : "All 16 checks must pass first"} className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-40" style={{ background: "var(--good)" }}>Pass → client review</button>
           <button type="button" onClick={() => setRejecting(true)} disabled={pending} className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ border: "1px solid var(--line-2)", color: "var(--danger)" }}>Fail / send back</button>
-          {!allPass ? <span className="text-xs" style={{ color: "var(--muted)" }}>{QA_CHECK_COUNT - passed} left</span> : null}
+          {!allPass ? <span className="text-xs" style={{ color: "var(--muted)" }}>{total - passed} left</span> : null}
         </div>
       )}
     </section>
