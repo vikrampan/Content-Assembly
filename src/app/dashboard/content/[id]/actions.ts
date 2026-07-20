@@ -447,3 +447,121 @@ export async function submitForClientReview(
   await reval(contentId);
   return { ok: true, message: "Passed the firewall — sent to the client for sign-off." };
 }
+
+// ===========================================================================
+// Content desk (0018) — hook engine, copy engineering, voice lint, variants.
+// ===========================================================================
+import { generateHooks, engineerCopy, lintVoice, generateVariant } from "@/lib/ai/copywriter";
+import { PLATFORMS } from "@/lib/mendly/copy";
+import type { HookCandidate, VoiceFlags } from "@/lib/types";
+
+async function loadItemWs(contentId: string) {
+  const supabase = await createClient();
+  const { data: item } = await supabase.from("content_items").select("*").eq("id", contentId).single<ContentItem>();
+  if (!item) return null;
+  const { data: ws } = await supabase.from("workspaces").select("*").eq("id", item.workspace_id).single<Workspace>();
+  if (!ws) return null;
+  return { supabase, item, ws };
+}
+
+/** Generate scored hook candidates and stash them on the item. */
+export async function generateHooksAction(contentId: string, formula: string): Promise<{ ok: true; hooks: HookCandidate[] } | { error: string }> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const ctx = await loadItemWs(contentId);
+  if (!ctx) return { error: "Not found." };
+  const hooks = await generateHooks(ctx.ws, ctx.item, formula);
+  if (hooks.length === 0) return { error: "Hook engine needs ANTHROPIC_API_KEY on the server." };
+  await ctx.supabase.from("content_items").update({ hook_options: hooks }).eq("id", contentId);
+  await reval(contentId);
+  return { ok: true, hooks };
+}
+
+/** Apply a chosen hook as the post's hook (snapshots first). */
+export async function applyHook(contentId: string, hookText: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const ctx = await loadItemWs(contentId);
+  if (!ctx) return { error: "Not found." };
+  await snapshot(ctx.supabase, ctx.item, session.userId, "Applied hook");
+  const { error } = await ctx.supabase.from("content_items").update({ hook: hookText }).eq("id", contentId);
+  if (error) return { error: error.message };
+  await reval(contentId);
+  return { ok: true, message: "Hook applied." };
+}
+
+/** Re-engineer the three-tier copy with triggers + framework + devices. */
+export async function engineerCopyAction(
+  contentId: string,
+  opts: { triggers: string[]; framework: string | null; devices: string[]; tone?: string },
+): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const ctx = await loadItemWs(contentId);
+  if (!ctx) return { error: "Not found." };
+  const out = await engineerCopy(ctx.ws, ctx.item, opts);
+  if (!out) return { error: "Copy engine needs ANTHROPIC_API_KEY on the server." };
+  await snapshot(ctx.supabase, ctx.item, session.userId, "Engineered copy");
+  const { error } = await ctx.supabase.from("content_items").update({
+    hook: out.hook, educational_shift: out.valueBridge, solution: out.cta,
+    triggers: opts.triggers, framework: opts.framework, devices: opts.devices,
+    tone: opts.tone?.trim() || ctx.item.tone,
+  }).eq("id", contentId);
+  if (error) return { error: error.message };
+  await reval(contentId);
+  return { ok: true, message: "Copy re-engineered." };
+}
+
+/** Run the brand-voice lint and store the result. */
+export async function lintVoiceAction(contentId: string): Promise<{ ok: true; flags: VoiceFlags } | { error: string }> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const ctx = await loadItemWs(contentId);
+  if (!ctx) return { error: "Not found." };
+  const flags = await lintVoice(ctx.ws, ctx.item);
+  await ctx.supabase.from("content_items").update({ voice_flags: flags }).eq("id", contentId);
+  await reval(contentId);
+  return { ok: true, flags };
+}
+
+/** Generate (or regenerate) a per-platform variant. */
+export async function generateVariantAction(contentId: string, platform: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const ctx = await loadItemWs(contentId);
+  if (!ctx) return { error: "Not found." };
+  const hint = PLATFORMS.find((p) => p.key === platform)?.hint ?? "";
+  const body = await generateVariant(ctx.ws, ctx.item, platform, hint);
+  if (!body) return { error: "Variants need ANTHROPIC_API_KEY on the server." };
+  const { error } = await ctx.supabase.from("content_variants").upsert(
+    { content_id: contentId, workspace_id: ctx.item.workspace_id, platform, body, created_by: session.userId, updated_at: new Date().toISOString() },
+    { onConflict: "content_id,platform" },
+  );
+  if (error) return { error: error.message };
+  await reval(contentId);
+  return { ok: true, message: `${platform} variant ready.` };
+}
+
+/** Save a manually edited variant. */
+export async function saveVariant(contentId: string, workspaceId: string, platform: string, body: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("content_variants").upsert(
+    { content_id: contentId, workspace_id: workspaceId, platform, body, created_by: session.userId, updated_at: new Date().toISOString() },
+    { onConflict: "content_id,platform" },
+  );
+  if (error) return { error: error.message };
+  await reval(contentId);
+  return { ok: true };
+}
+
+export async function deleteVariant(variantId: string, contentId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("content_variants").delete().eq("id", variantId);
+  if (error) return { error: error.message };
+  await reval(contentId);
+  return { ok: true };
+}

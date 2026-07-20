@@ -4,9 +4,10 @@ import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { STAGE_LABEL } from "@/lib/mendly/stages";
 import { OBJECTIVE_LABELS, type Objective } from "@/lib/mendly/strategy";
-import type { Asset, ContentItem, ContentVersion, Comment, Workspace } from "@/lib/types";
+import type { Asset, ContentItem, ContentVariant, ContentVersion, Comment, Workspace } from "@/lib/types";
 import { AssignPanel } from "./AssignPanel";
 import { ContentEditor } from "./ContentEditor";
+import { CopyStudio } from "./CopyStudio";
 import { QaFirewall } from "./QaFirewall";
 import { Deliverables, type DeliverableView } from "./Deliverables";
 import { Scheduler } from "./Scheduler";
@@ -41,16 +42,18 @@ export default async function ContentDetailPage({
     .single<ContentItem>();
   if (!item) notFound();
 
-  const [{ data: ws }, { data: versionRows }, { data: assetRows }, { data: commentRows }] = await Promise.all([
+  const [{ data: ws }, { data: versionRows }, { data: assetRows }, { data: commentRows }, { data: variantRows }] = await Promise.all([
     supabase.from("workspaces").select("*").eq("id", item.workspace_id).single<Workspace>(),
     supabase.from("content_versions").select("*").eq("content_id", id).order("created_at", { ascending: false }).limit(20),
     supabase.from("assets").select("*").eq("content_id", id).order("created_at", { ascending: false }),
     supabase.from("comments").select("*").eq("content_id", id).eq("internal", false).order("created_at", { ascending: false }),
+    supabase.from("content_variants").select("*").eq("content_id", id).order("platform"),
   ]);
 
   const versions = (versionRows as ContentVersion[]) ?? [];
   const assets = (assetRows as Asset[]) ?? [];
   const suggestions = (commentRows as Comment[]) ?? [];
+  const variants = (variantRows as ContentVariant[]) ?? [];
 
   const deliverables: DeliverableView[] = await Promise.all(
     assets.map(async (a) => {
@@ -107,6 +110,9 @@ export default async function ContentDetailPage({
 
       {/* The three-tier copy (Stage 05) — editable + AI regenerate + history. */}
       <ContentEditor item={item} versions={versions} />
+
+      {/* The Content desk's copy engineering — hooks, triggers, voice, variants. */}
+      <CopyStudio item={item} variants={variants} />
 
       {/* Creative deliverables — the design/video/image/audio desks' output. */}
       <Deliverables contentId={item.id} workspaceId={item.workspace_id} items={deliverables} />

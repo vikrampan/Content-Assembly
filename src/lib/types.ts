@@ -184,6 +184,32 @@ export interface ContentItem {
   qa_reject_reasons: string | null;
   pillar_id: string | null;
   campaign: string | null;
+  // 0018 — copy engineering
+  triggers: string[];
+  framework: string | null;
+  devices: string[];
+  hook_options: HookCandidate[] | null;
+  voice_flags: VoiceFlags | null;
+}
+
+export interface HookCandidate {
+  text: string;
+  formula: string;
+  score: { stop: number; curiosity: number; clarity: number; fit: number };
+}
+
+export interface VoiceFlags {
+  score: number; // 0-100
+  issues: { term: string; why: string }[];
+}
+
+export interface ContentVariant {
+  id: string;
+  content_id: string;
+  workspace_id: string;
+  platform: string;
+  body: string;
+  created_at: string;
 }
 
 export interface ContentPillar {
