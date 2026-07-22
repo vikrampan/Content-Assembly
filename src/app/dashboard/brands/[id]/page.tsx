@@ -7,7 +7,6 @@ import { BrandBookForm } from "./BrandBookForm";
 import { BrandKit, type BrandAssetView } from "./BrandKit";
 import { BrandImport } from "./BrandImport";
 import { BrandBookSections } from "./BrandBookSections";
-import { BrandLabs } from "./BrandLabs";
 import { BrandLockBar } from "./BrandLockBar";
 import { BrandHistory } from "./BrandHistory";
 
@@ -57,13 +56,6 @@ export default async function BrandEditorPage({
     }),
   );
 
-  // Signed URL for the primary logo (for the labs preview).
-  let logoUrl: string | null = null;
-  if (data.logo_path) {
-    const { data: signed } = await supabase.storage.from("assets").createSignedUrl(data.logo_path, 3600);
-    logoUrl = signed?.signedUrl ?? null;
-  }
-
   const score = coreScore(data);
 
   return (
@@ -83,7 +75,6 @@ export default async function BrandEditorPage({
       <BrandKit brand={data} assets={kit} />
       <BrandBookForm brand={data} />
       <BrandBookSections workspaceId={id} initial={data.brand_book ?? {}} />
-      <BrandLabs brand={data} logoUrl={logoUrl} />
       <BrandHistory versions={versions} />
     </div>
   );

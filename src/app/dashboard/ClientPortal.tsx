@@ -4,11 +4,12 @@ import { ClientPostCard, type Creative, type ThreadMsg, type Variant } from "./C
 import { CalendarApproval as CalendarApprovalControl } from "./CalendarApproval";
 import { CalendarPostChip } from "./CalendarPostChip";
 import { ClientAnalytics } from "./ClientAnalytics";
+import { ClientPipeline } from "./ClientPipeline";
 import { UpcomingSchedule, type UpcomingEntry } from "./UpcomingSchedule";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const CV_IMG = /\.(png|jpe?g|gif|webp|avif)$/i;
+const CV_IMG = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
 const CV_VID = /\.(mp4|mov|webm|m4v)$/i;
 
 function Kpi({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
@@ -188,6 +189,9 @@ export async function ClientPortal() {
         <Kpi label="Published" value={live} hint="Live now" />
       </div>
 
+      {/* Where each post is in the pipeline */}
+      <ClientPipeline posts={calendar} accent={accent} />
+
       {/* Pending approval */}
       <section>
         <div className="mb-1 flex items-baseline gap-3">
@@ -303,23 +307,26 @@ export async function ClientPortal() {
       {/* Analytics */}
       <ClientAnalytics metrics={metrics} posts={approved} accent={accentReadable} />
 
-      {/* Brand book (read-only) */}
-      <section>
-        <h2 className="mb-3 text-xl font-bold" style={{ fontFamily: "var(--serif)" }}>Your brand book</h2>
-        <div className="card p-5">
-          <div className="mb-3 flex flex-wrap gap-2">
-            {ws.primary_hex ? <Swatch hex={ws.primary_hex} /> : null}
-            {ws.secondary_hex ? <Swatch hex={ws.secondary_hex} /> : null}
+      {/* Brand book (read-only) — only once the Brand Designer has locked it. */}
+      {ws.brand_status === "locked" ? (
+        <section>
+          <h2 className="mb-3 text-xl font-bold" style={{ fontFamily: "var(--serif)" }}>Your brand book</h2>
+          <div className="card p-5">
+            <div className="mb-3 flex flex-wrap gap-2">
+              {ws.primary_hex ? <Swatch hex={ws.primary_hex} /> : null}
+              {ws.secondary_hex ? <Swatch hex={ws.secondary_hex} /> : null}
+              {ws.accent_hex ? <Swatch hex={ws.accent_hex} /> : null}
+            </div>
+            <div>
+              <DnaRow label="Voice & tone" value={ws.voice_tone} />
+              <DnaRow label="Photography" value={ws.photography_style} />
+              <DnaRow label="Do" value={ws.do_rules} />
+              <DnaRow label="Never" value={ws.never_rules} />
+              <DnaRow label="Typography" value={[ws.headline_font, ws.body_font].filter(Boolean).join(" · ") || null} />
+            </div>
           </div>
-          <div>
-            <DnaRow label="Voice & tone" value={ws.voice_tone} />
-            <DnaRow label="Photography" value={ws.photography_style} />
-            <DnaRow label="Do" value={ws.do_rules} />
-            <DnaRow label="Never" value={ws.never_rules} />
-            <DnaRow label="Typography" value={[ws.headline_font, ws.body_font].filter(Boolean).join(" · ") || null} />
-          </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

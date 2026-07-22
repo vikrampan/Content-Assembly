@@ -114,8 +114,6 @@ export interface BrandBookInput {
   never_rules: string | null;
   locations: string | null;
   ai_style_suffix: string | null;
-  scrape_location: string | null;
-  scrape_radius_km: number;
 }
 
 const HEX_RE = /^[0-9a-fA-F]{6}$/;
@@ -159,10 +157,6 @@ export async function updateBrandBook(input: BrandBookInput): Promise<ActionResu
       never_rules: norm(input.never_rules),
       locations: norm(input.locations),
       ai_style_suffix: norm(input.ai_style_suffix),
-      scrape_location: norm(input.scrape_location),
-      scrape_radius_km: Number.isFinite(input.scrape_radius_km)
-        ? Math.max(1, Math.min(200, Math.floor(input.scrape_radius_km)))
-        : 25,
     })
     .eq("id", input.id);
 
