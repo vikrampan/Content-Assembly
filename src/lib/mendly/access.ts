@@ -32,13 +32,19 @@ const NAV: Record<string, NavItem> = {
   portals: { href: "/dashboard/portals", label: "Desks" },
   team: { href: "/dashboard/team", label: "Team & Access" },
   ai: { href: "/dashboard/ai", label: "AI" },
+  // Client portal sections
+  chome: { href: "/dashboard", label: "Home" },
+  capprovals: { href: "/dashboard/approvals", label: "Approvals" },
+  cplan: { href: "/dashboard/plan", label: "Calendar" },
+  cinsights: { href: "/dashboard/insights", label: "Analytics" },
+  cbrandbook: { href: "/dashboard/brand-book", label: "Brand Book" },
 };
 
 // The nav keys each function may see. "mydesk" resolves to /dashboard/desk/<fn>.
 const NAV_FOR: Record<Fn, string[]> = {
   admin: ["board", "brands", "calendar", "strategy", "library", "personas", "portals", "team", "ai"],
   strategy: ["board", "calendar", "strategy", "personas"],
-  client: ["board"],
+  client: ["chome", "capprovals", "cplan", "cinsights", "cbrandbook"],
   brand: ["brands"],
   capture: ["library"],
   content: ["mydesk", "strategy"],
@@ -61,6 +67,11 @@ const ROUTE_ALLOW: Record<string, Fn[]> = {
   portals: ["admin"],
   team: ["admin"],
   ai: ["admin"],
+  // Client-only portal sections
+  approvals: ["client"],
+  plan: ["client"],
+  insights: ["client"],
+  brandbook: ["client"],
   // any internal staff may open a content item they're working on
   content_detail: ["admin", "strategy", "content", "design", "video", "image", "audio", "qa", "social"],
 };

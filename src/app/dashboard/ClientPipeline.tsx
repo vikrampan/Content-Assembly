@@ -1,10 +1,6 @@
 // Server component — shows the client exactly where each post sits in the pipeline.
 import type { ContentItem } from "@/lib/types";
-
-const STEPS = ["Planned", "In production", "Quality check", "Your review", "Scheduled", "Live"];
-const STAGE_STEP: Record<string, number> = {
-  planning: 0, content: 1, production: 1, qa: 2, client_review: 3, scheduling: 4, published: 5,
-};
+import { CLIENT_STEPS as STEPS, stageStep } from "./client/shared";
 
 function Track({ step, accent }: { step: number; accent: string }) {
   return (
@@ -45,7 +41,7 @@ export function ClientPipeline({ posts, accent }: { posts: ContentItem[]; accent
       <p className="mb-4 text-sm" style={{ color: "var(--muted)" }}>Live status of everything the team is working on for you this month.</p>
       <div className="space-y-2.5">
         {inFlight.map((p) => {
-          const step = STAGE_STEP[p.stage] ?? 0;
+          const step = stageStep(p.stage);
           return (
             <div key={p.id} className="card p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">

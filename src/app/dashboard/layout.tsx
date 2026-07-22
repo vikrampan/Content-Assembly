@@ -32,7 +32,7 @@ export default async function DashboardLayout({
 }) {
   const { profile, email } = await requireSession();
   const fn = userFunction(profile);
-  const nav = navFor(fn);
+  let nav = navFor(fn);
   const displayName = profile.full_name ?? email ?? "";
 
   // The sidebar subtitle: clients see their brand; staff see their desk label.
@@ -46,6 +46,9 @@ export default async function DashboardLayout({
       const { data: signed } = await supabase.storage.from("assets").createSignedUrl(ws.logo_path, 3600);
       logoUrl = signed?.signedUrl ?? null;
     }
+    // Badge the Approvals nav with the number of posts awaiting the client.
+    const { count } = await supabase.from("content_items").select("id", { count: "exact", head: true }).eq("stage", "client_review");
+    if (count && count > 0) nav = nav.map((n) => (n.label === "Approvals" ? { ...n, badge: count } : n));
   }
 
   return (

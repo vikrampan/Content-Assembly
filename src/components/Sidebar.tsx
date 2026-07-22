@@ -8,6 +8,7 @@ import { signOut } from "@/app/login/actions";
 export interface NavEntry {
   href: string;
   label: string;
+  badge?: number;
 }
 
 // Line icons keyed by nav label. One consistent 24px stroke set.
@@ -33,6 +34,14 @@ function Icon({ label }: { label: string }) {
         return <><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 5a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6" /></>;
       case "My Desk":
         return <><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M8 21h8M12 18v3" /></>;
+      case "Home":
+        return <><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></>;
+      case "Approvals":
+        return <><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></>;
+      case "Analytics":
+        return <><path d="M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-3" /></>;
+      case "Brand Book":
+        return <><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 19a2 2 0 0 1 2-2h13" /></>;
       default:
         return <><circle cx="12" cy="12" r="9" /></>;
     }
@@ -105,6 +114,9 @@ export function Sidebar({
             >
               <Icon label={item.label} />
               <span>{item.label}</span>
+              {item.badge ? (
+                <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--accent)", color: "#fff" }}>{item.badge}</span>
+              ) : null}
             </Link>
           ))}
         </nav>

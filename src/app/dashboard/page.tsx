@@ -1,7 +1,7 @@
 import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { ClientPortal } from "./ClientPortal";
+import { HomeView } from "./client/HomeView";
 import type { ContentItem, Workspace } from "@/lib/types";
 
 function Metric({ label, value }: { label: string; value: number | string }) {
@@ -16,8 +16,8 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 export default async function DashboardPage() {
   const session = await requireAccess("board");
 
-  // Clients get their own polished portal, not the internal control room.
-  if (session.fn === "client") return <ClientPortal />;
+  // Clients get their own multi-section portal, not the internal control room.
+  if (session.fn === "client") return <HomeView />;
 
   const supabase = await createClient();
   const [{ data: contentRaw }, { data: wsRaw }] = await Promise.all([
