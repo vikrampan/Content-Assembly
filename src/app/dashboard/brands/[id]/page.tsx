@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, hasServiceRole } from "@/lib/supabase/admin";
 import type { Asset, BrandBookVersion, Workspace } from "@/lib/types";
 import { BrandBookForm } from "./BrandBookForm";
+import { ClientLoginCard } from "./ClientLoginCard";
 import { BrandKit, type BrandAssetView } from "./BrandKit";
 import { BrandImport } from "./BrandImport";
 import { BrandBookSections } from "./BrandBookSections";
@@ -28,12 +30,24 @@ export default async function BrandEditorPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("brands");
+  const session = await requireAccess("brands");
 
   const { id } = await params;
   const supabase = await createClient();
   const { data } = await supabase.from("workspaces").select("*").eq("id", id).single<Workspace>();
   if (!data) notFound();
+
+  // Admin-only: the brand's client login email (for password reset).
+  let clientEmail: string | null = null;
+  if (session.fn === "admin" && hasServiceRole()) {
+    const admin = createAdminClient();
+    const { data: mem } = await admin.from("memberships").select("user_id").eq("workspace_id", id).eq("role", "client").limit(1).maybeSingle();
+    const uid = (mem as { user_id: string } | null)?.user_id;
+    if (uid) {
+      const { data: u } = await admin.auth.admin.getUserById(uid);
+      clientEmail = u.user?.email ?? null;
+    }
+  }
 
   const [{ data: assetRows }, { data: versionRows }] = await Promise.all([
     supabase.from("assets").select("*").eq("workspace_id", id).is("content_id", null).in("kind", ["logo", "font", "brand"]).order("created_at", { ascending: false }),
@@ -71,6 +85,7 @@ export default async function BrandEditorPage({
       </div>
 
       <BrandLockBar workspaceId={id} status={data.brand_status} lockedAt={data.locked_at} filled={score.filled} total={score.total} />
+      {session.fn === "admin" ? <ClientLoginCard workspaceId={id} email={clientEmail} /> : null}
       <BrandImport workspaceId={id} />
       <BrandKit brand={data} assets={kit} />
       <BrandBookForm brand={data} />

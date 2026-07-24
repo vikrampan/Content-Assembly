@@ -399,3 +399,17 @@ export async function restoreBrandVersion(versionId: string): Promise<ActionResu
   revalidatePath(`/dashboard/brands/${v.workspace_id}`);
   return { ok: true };
 }
+
+/** Admin: reset the client login password for a brand (needs service role). */
+export async function resetClientLogin(workspaceId: string, newPassword: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!hasServiceRole()) return { error: "SUPABASE_SERVICE_ROLE_KEY not set on the server." };
+  if (newPassword.length < 8) return { error: "Password must be at least 8 characters." };
+  const admin = createAdminClient();
+  const { data: mem } = await admin.from("memberships").select("user_id").eq("workspace_id", workspaceId).eq("role", "client").limit(1).maybeSingle();
+  const userId = (mem as { user_id: string } | null)?.user_id;
+  if (!userId) return { error: "No client login found for this brand." };
+  const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
+  if (error) return { error: error.message };
+  return { ok: true };
+}

@@ -40,6 +40,8 @@ function Icon({ label }: { label: string }) {
         return <><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></>;
       case "Analytics":
         return <><path d="M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-3" /></>;
+      case "Cockpit":
+        return <><circle cx="12" cy="12" r="9" /><path d="M12 12l4-2M12 3v2M3 12h2M12 21v-2M21 12h-2" /></>;
       case "Brand Book":
         return <><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 19a2 2 0 0 1 2-2h13" /></>;
       default:

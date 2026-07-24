@@ -24,6 +24,7 @@ export interface NavItem { href: string; label: string }
 
 const NAV: Record<string, NavItem> = {
   board: { href: "/dashboard", label: "Dashboard" },
+  cockpit: { href: "/dashboard/cockpit", label: "Cockpit" },
   brands: { href: "/dashboard/brands", label: "Brand Books" },
   calendar: { href: "/dashboard/calendar", label: "Calendar" },
   strategy: { href: "/dashboard/strategy", label: "Strategy Desk" },
@@ -42,7 +43,7 @@ const NAV: Record<string, NavItem> = {
 
 // The nav keys each function may see. "mydesk" resolves to /dashboard/desk/<fn>.
 const NAV_FOR: Record<Fn, string[]> = {
-  admin: ["board", "brands", "calendar", "strategy", "library", "personas", "portals", "team", "ai"],
+  admin: ["board", "cockpit", "brands", "calendar", "strategy", "library", "personas", "portals", "team", "ai"],
   strategy: ["board", "calendar", "strategy", "personas"],
   client: ["chome", "capprovals", "cplan", "cinsights", "cbrandbook"],
   brand: ["brands"],
@@ -59,6 +60,7 @@ const NAV_FOR: Record<Fn, string[]> = {
 // Which functions may open each guarded route.
 const ROUTE_ALLOW: Record<string, Fn[]> = {
   board: ["admin", "strategy", "client"],
+  cockpit: ["admin"],
   brands: ["admin", "brand"],
   calendar: ["admin", "strategy"],
   strategy: ["admin", "strategy", "content"],
