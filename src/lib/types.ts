@@ -243,6 +243,17 @@ export interface ContentVariant {
   created_at: string;
 }
 
+export interface MetaConnection {
+  workspace_id: string;
+  page_id: string;
+  page_name: string | null;
+  ig_user_id: string | null;
+  access_token: string; // secret — server-only
+  token_expires: string | null;
+  connected_by: string | null;
+  created_at: string;
+}
+
 export interface Notification {
   id: string;
   user_id: string;

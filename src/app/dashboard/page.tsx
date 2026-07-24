@@ -20,13 +20,15 @@ export default async function DashboardPage() {
   if (session.fn === "client") return <HomeView />;
 
   const supabase = await createClient();
-  const [{ data: contentRaw }, { data: wsRaw }] = await Promise.all([
+  const [{ data: contentRaw }, { data: wsRaw }, { data: staffRaw }] = await Promise.all([
     supabase.from("content_items").select("*").order("updated_at", { ascending: false }),
     supabase.from("workspaces").select("*").order("name"),
+    supabase.from("profiles").select("id, full_name").in("account_type", ["admin", "team_incharge"]),
   ]);
   const content = (contentRaw as ContentItem[]) ?? [];
   const workspaces = (wsRaw as Workspace[]) ?? [];
   const wsName = Object.fromEntries(workspaces.map((w) => [w.id, w.name]));
+  const staffName = Object.fromEntries(((staffRaw as { id: string; full_name: string | null }[]) ?? []).map((s) => [s.id, s.full_name ?? "Staff"]));
 
   const count = (stages: string[]) => content.filter((c) => stages.includes(c.stage)).length;
 
@@ -67,7 +69,7 @@ export default async function DashboardPage() {
           No cards yet. {session.fn === "admin" ? "Onboard a brand and plan the calendar to get started." : "Plan the calendar to get started."}
         </div>
       ) : (
-        <KanbanBoard items={content} wsName={wsName} />
+        <KanbanBoard items={content} wsName={wsName} staffName={staffName} />
       )}
     </div>
   );

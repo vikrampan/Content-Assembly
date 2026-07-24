@@ -12,13 +12,21 @@ const FORMAT_ICON: Record<string, string> = { post: "▢", carousel: "▧", reel
  * The control-room board. Columns are the pipeline stages; a card sits in the
  * column of the desk it's on and moves as it's routed. Drag a card to reroute.
  */
+const initialsOf = (name: string) => {
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  return p.length === 0 ? "·" : p.length === 1 ? p[0].slice(0, 2).toUpperCase() : (p[0][0] + p[p.length - 1][0]).toUpperCase();
+};
+
 export function KanbanBoard({
   items: initial,
   wsName,
+  staffName,
 }: {
   items: ContentItem[];
   wsName?: Record<string, string>;
+  staffName?: Record<string, string>;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
   const [items, setItems] = useState(initial);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +91,18 @@ export function KanbanBoard({
                         </Link>
                         {item.assignment_note ? (
                           <div className="mt-1.5 line-clamp-2 text-[11px] opacity-55">{item.assignment_note}</div>
+                        ) : null}
+                        {item.due_date || (item.assigned_to && staffName?.[item.assigned_to]) ? (
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            {item.due_date ? (
+                              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold" style={item.due_date < today && item.stage !== "published" ? { background: "rgba(192,85,63,.14)", color: "var(--danger)" } : { background: "var(--panel-2)", color: "var(--muted)" }}>
+                                {new Date(item.due_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </span>
+                            ) : null}
+                            {item.assigned_to && staffName?.[item.assigned_to] ? (
+                              <span className="ml-auto grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold text-white" style={{ background: "var(--accent)" }} title={staffName[item.assigned_to]}>{initialsOf(staffName[item.assigned_to])}</span>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
                     ))

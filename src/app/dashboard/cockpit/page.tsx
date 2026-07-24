@@ -21,14 +21,16 @@ export default async function CockpitPage() {
   await requireAccess("cockpit");
   const supabase = await createClient();
 
-  const [{ data: wsRaw }, { data: itemsRaw }, { data: reviewsRaw }] = await Promise.all([
+  const [{ data: wsRaw }, { data: itemsRaw }, { data: reviewsRaw }, { data: staffRaw }] = await Promise.all([
     supabase.from("workspaces").select("*").order("name"),
     supabase.from("content_items").select("*"),
     supabase.from("qa_reviews").select("result, reasons"),
+    supabase.from("profiles").select("id, full_name, department").in("account_type", ["admin", "team_incharge"]),
   ]);
   const brands = (wsRaw as Workspace[]) ?? [];
   const items = (itemsRaw as ContentItem[]) ?? [];
   const reviews = (reviewsRaw as { result: string; reasons: string | null }[]) ?? [];
+  const staff = (staffRaw as { id: string; full_name: string | null; department: string | null }[]) ?? [];
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -52,6 +54,12 @@ export default async function CockpitPage() {
   const topReasons = [...reasonCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   const integrations = integrationStatus();
+
+  // Workload per person (open = assigned & not yet published).
+  const workload = staff.map((s) => {
+    const mine = items.filter((i) => i.assigned_to === s.id && i.stage !== "published");
+    return { s, open: mine.length, overdue: mine.filter((i) => i.due_date && i.due_date < todayStr).length };
+  }).filter((w) => w.open > 0).sort((a, b) => b.open - a.open);
 
   // Stage distribution
   const stageCounts = STAGES.map((s) => ({ ...s, n: items.filter((i) => i.stage === s.key).length }));
@@ -150,6 +158,25 @@ export default async function CockpitPage() {
           ))}
         </div>
       </div>
+      {/* Team workload */}
+      {workload.length > 0 ? (
+        <div className="card p-5">
+          <div className="mb-3 text-sm font-semibold">Team workload <span className="text-xs font-normal" style={{ color: "var(--muted)" }}>— open assigned posts</span></div>
+          <div className="space-y-2">
+            {workload.map(({ s, open, overdue }) => (
+              <div key={s.id} className="flex items-center gap-3 text-sm">
+                <span className="w-40 shrink-0 truncate font-medium">{s.full_name ?? "Staff"} {s.department ? <span className="text-[11px]" style={{ color: "var(--faint)" }}>· {s.department}</span> : null}</span>
+                <div className="h-3 flex-1 overflow-hidden rounded-full" style={{ background: "var(--panel-2)" }}>
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, open * 12)}%`, background: "var(--accent)" }} />
+                </div>
+                <span className="w-8 text-right tabular-nums font-semibold">{open}</span>
+                {overdue > 0 ? <span className="pill" style={{ background: "rgba(192,85,63,.14)", color: "var(--danger)" }}>{overdue} late</span> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {/* Integrations & governance */}
       <div className="card p-5">
         <div className="mb-1 text-sm font-semibold">Integrations</div>
