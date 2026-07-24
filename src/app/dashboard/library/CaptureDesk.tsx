@@ -84,11 +84,10 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
     }
     setBusy(true);
     const supabase = createClient();
-    const uid = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
     try {
       for (const file of Array.from(files)) {
         const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const path = `${workspaceId}/${uid()}-${safe}`;
+        const path = `${workspaceId}/${crypto.randomUUID()}-${safe}`;
         const { error: upErr } = await supabase.storage.from("assets").upload(path, file, { upsert: false });
         if (upErr) throw upErr;
         const { error: rowErr } = await supabase.from("assets").insert({
