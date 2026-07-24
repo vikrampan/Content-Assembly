@@ -77,13 +77,19 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
 
   async function onFiles(files: FileList | null) {
     if (!files || files.length === 0 || !workspaceId) return;
-    setError(null); setBusy(true);
+    setError(null);
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      setError("Storage isn't configured — this deployment is missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY. Add them in Vercel → Settings → Environment Variables, then redeploy.");
+      return;
+    }
+    setBusy(true);
     const supabase = createClient();
+    const uid = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
     try {
       for (const file of Array.from(files)) {
         const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const path = `${workspaceId}/${crypto.randomUUID()}-${safe}`;
-        const { error: upErr } = await supabase.storage.from("assets").upload(path, file);
+        const path = `${workspaceId}/${uid()}-${safe}`;
+        const { error: upErr } = await supabase.storage.from("assets").upload(path, file, { upsert: false });
         if (upErr) throw upErr;
         const { error: rowErr } = await supabase.from("assets").insert({
           workspace_id: workspaceId, storage_path: path, kind: "raw", label: file.name,
@@ -94,7 +100,8 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
       if (fileRef.current) fileRef.current.value = "";
       start(() => router.refresh());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed.");
+      console.error("[capture upload]", e);
+      setError(e instanceof Error ? e.message : (typeof e === "string" ? e : "Upload failed — check the browser console."));
     } finally { setBusy(false); }
   }
 
