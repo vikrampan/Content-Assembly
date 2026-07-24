@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient, hasServiceRole } from "@/lib/supabase/admin";
 import type { Asset, BrandBookVersion, Workspace } from "@/lib/types";
 import { BrandBookForm } from "./BrandBookForm";
-import { ClientLoginCard } from "./ClientLoginCard";
+import { ClientTeamCard, type ClientMember } from "./ClientTeamCard";
 import { BrandKit, type BrandAssetView } from "./BrandKit";
 import { BrandImport } from "./BrandImport";
 import { BrandBookSections } from "./BrandBookSections";
@@ -37,16 +37,16 @@ export default async function BrandEditorPage({
   const { data } = await supabase.from("workspaces").select("*").eq("id", id).single<Workspace>();
   if (!data) notFound();
 
-  // Admin-only: the brand's client login email (for password reset).
-  let clientEmail: string | null = null;
+  // Admin-only: the brand's client team (for management).
+  let clientMembers: ClientMember[] = [];
   if (session.fn === "admin" && hasServiceRole()) {
     const admin = createAdminClient();
-    const { data: mem } = await admin.from("memberships").select("user_id").eq("workspace_id", id).eq("role", "client").limit(1).maybeSingle();
-    const uid = (mem as { user_id: string } | null)?.user_id;
-    if (uid) {
-      const { data: u } = await admin.auth.admin.getUserById(uid);
-      clientEmail = u.user?.email ?? null;
-    }
+    const { data: mems } = await admin.from("memberships").select("user_id, client_role").eq("workspace_id", id).eq("role", "client");
+    const rows = (mems as { user_id: string; client_role: string | null }[]) ?? [];
+    clientMembers = await Promise.all(rows.map(async (m) => {
+      const { data: u } = await admin.auth.admin.getUserById(m.user_id);
+      return { userId: m.user_id, email: u.user?.email ?? "—", name: (u.user?.user_metadata?.full_name as string) ?? u.user?.email ?? "Client", role: m.client_role ?? "owner" };
+    }));
   }
 
   const [{ data: assetRows }, { data: versionRows }] = await Promise.all([
@@ -85,7 +85,7 @@ export default async function BrandEditorPage({
       </div>
 
       <BrandLockBar workspaceId={id} status={data.brand_status} lockedAt={data.locked_at} filled={score.filled} total={score.total} />
-      {session.fn === "admin" ? <ClientLoginCard workspaceId={id} email={clientEmail} /> : null}
+      {session.fn === "admin" ? <ClientTeamCard workspaceId={id} members={clientMembers} /> : null}
       <BrandImport workspaceId={id} />
       <BrandKit brand={data} assets={kit} />
       <BrandBookForm brand={data} />

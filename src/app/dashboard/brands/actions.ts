@@ -413,3 +413,50 @@ export async function resetClientLogin(workspaceId: string, newPassword: string)
   if (error) return { error: error.message };
   return { ok: true };
 }
+
+// ===========================================================================
+// Multi-user client teams (0025) — owner + reviewers per brand.
+// ===========================================================================
+
+/** Add another client user (reviewer/owner) to a brand. Admin + service role. */
+export async function addClientMember(workspaceId: string, input: { email: string; name: string; password: string; role: "owner" | "reviewer" }): Promise<ActionResult> {
+  await requireAdmin();
+  if (!hasServiceRole()) return { error: "SUPABASE_SERVICE_ROLE_KEY not set on the server." };
+  const email = input.email.trim().toLowerCase();
+  if (!email) return { error: "Email is required." };
+  if (input.password.length < 8) return { error: "Password must be at least 8 characters." };
+
+  const admin = createAdminClient();
+  const { data: created, error: userErr } = await admin.auth.admin.createUser({
+    email, password: input.password, email_confirm: true, user_metadata: { full_name: input.name.trim() || email },
+  });
+  if (userErr) return { error: `Login failed: ${userErr.message}` };
+  const uid = created.user.id;
+  await admin.from("profiles").update({ account_type: "client", full_name: input.name.trim() || email }).eq("id", uid);
+  const { error: memErr } = await admin.from("memberships").insert({ workspace_id: workspaceId, user_id: uid, role: "client", client_role: input.role });
+  if (memErr) { await admin.auth.admin.deleteUser(uid); return { error: memErr.message }; }
+  revalidatePath(`/dashboard/brands/${workspaceId}`);
+  return { ok: true };
+}
+
+/** Remove a client user from a brand (deletes their login). */
+export async function removeClientMember(workspaceId: string, userId: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!hasServiceRole()) return { error: "SUPABASE_SERVICE_ROLE_KEY not set on the server." };
+  const admin = createAdminClient();
+  await admin.from("memberships").delete().eq("workspace_id", workspaceId).eq("user_id", userId);
+  await admin.auth.admin.deleteUser(userId);
+  revalidatePath(`/dashboard/brands/${workspaceId}`);
+  return { ok: true };
+}
+
+/** Reset any user's password by id (admin). */
+export async function resetUserPassword(userId: string, newPassword: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!hasServiceRole()) return { error: "SUPABASE_SERVICE_ROLE_KEY not set on the server." };
+  if (newPassword.length < 8) return { error: "Password must be at least 8 characters." };
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
+  if (error) return { error: error.message };
+  return { ok: true };
+}
