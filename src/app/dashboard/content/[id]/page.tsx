@@ -11,6 +11,7 @@ import { ContentEditor } from "./ContentEditor";
 import { CopyStudio } from "./CopyStudio";
 import { SuggestionThread } from "./SuggestionThread";
 import { QaFirewall } from "./QaFirewall";
+import { BrandRef } from "./BrandRef";
 import { Deliverables, type DeliverableView } from "./Deliverables";
 import { Scheduler } from "./Scheduler";
 
@@ -116,8 +117,9 @@ export default async function ContentDetailPage({
       {/* Creative deliverables — the design/video/image/audio desks' output. */}
       <Deliverables contentId={item.id} workspaceId={item.workspace_id} items={deliverables} />
 
-      {/* The firewall (Stage 06) — the gate to the client. */}
-      <QaFirewall contentId={item.id} stage={item.stage} initial={item.qa_checklist} initialNotes={item.qa_notes} checklist={checklist} brandFirewall={brandGroups.length > 0} aiResult={item.qa_ai} />
+      {/* Brand reference + the firewall (Stage 06) — the gate to the client. */}
+      {ws ? <BrandRef ws={ws} /> : null}
+      <QaFirewall contentId={item.id} stage={item.stage} initial={item.qa_checklist} initialNotes={item.qa_notes} checklist={checklist} brandFirewall={brandGroups.length > 0} />
 
       {/* Social scheduling (Stage 07). */}
       <Scheduler contentId={item.id} stage={item.stage} variants={variants} scheduled={(scheduledRows as ScheduledPost[]) ?? []} />

@@ -184,6 +184,7 @@ export interface ContentItem {
   qa_reject_reasons: string | null;
   pillar_id: string | null;
   campaign: string | null;
+  change_request: string | null;
   // 0018 — copy engineering
   triggers: string[];
   framework: string | null;

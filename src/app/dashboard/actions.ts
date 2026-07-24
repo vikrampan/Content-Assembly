@@ -92,6 +92,31 @@ export async function clientReview(
 }
 
 /**
+ * Client requests a change on a post, tagged by type — the DB function routes
+ * the card to the right desk (content / production) and notifies the team.
+ */
+export async function requestPostChange(
+  contentId: string,
+  changeType: "media" | "content" | "editing" | "combination",
+  note: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("client_request_change", {
+    p_content_id: contentId,
+    p_change_type: changeType,
+    p_note: note.trim() || null,
+  });
+  if (error) return { error: error.message };
+
+  const { data: item } = await supabase.from("content_items").select("title").eq("id", contentId).single<{ title: string }>();
+  await notifyChangesRequested(item?.title ?? "a post", `[${changeType}] ${note.trim()}`);
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/plan");
+  return { ok: true };
+}
+
+/**
  * Granular calendar review: a client leaves a suggestion on a single planned
  * post. Stored as a non-internal comment (RLS lets the client insert on their
  * own workspace); the desks see it on the content detail page.

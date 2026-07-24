@@ -33,7 +33,7 @@ export const DEPARTMENTS: Department[] = [
     statuses: [] },
   { key: "qa", label: "QA", blurb: "The brand firewall — nothing ships until it passes.", stage: "Stage 06",
     statuses: ["admin_review"] },
-  { key: "social", label: "Social", blurb: "Publishing timing, stories, and the 60-minute reply sprint.", stage: "Stage 08",
+  { key: "social", label: "Account Manager", blurb: "Schedules across platforms, owns publishing timing and the analytics loop.", stage: "Stage 08",
     statuses: ["approved", "scheduled", "published"] },
 ];
 

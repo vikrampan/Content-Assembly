@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getDepartment, DEPARTMENT_LABELS } from "@/lib/mendly/departments";
 import { deskStage, STAGE_LABEL } from "@/lib/mendly/stages";
 import type { AiPersona, ContentItem, Workspace } from "@/lib/types";
-import { QaDeskPanel, type QaAnalytics, type BrandFw } from "./QaDeskPanel";
+import { QaDeskPanel, type QaAnalytics } from "./QaDeskPanel";
 import { SocialCockpit, type SocialEntry } from "./SocialCockpit";
 import { hasMeta } from "@/lib/social/publish";
 
@@ -65,14 +65,10 @@ export default async function DeskPage({
     }));
   }
 
-  // QA desk: analytics + per-brand firewall status.
+  // QA desk: analytics.
   let qaAnalytics: QaAnalytics | null = null;
-  let qaBrands: BrandFw[] = [];
   if (d.key === "qa") {
-    const [{ data: reviews }, { data: checklists }] = await Promise.all([
-      supabase.from("qa_reviews").select("result, reasons").limit(1000),
-      supabase.from("qa_checklists").select("workspace_id"),
-    ]);
+    const { data: reviews } = await supabase.from("qa_reviews").select("result, reasons").limit(1000);
     const rows = (reviews as { result: string; reasons: string | null }[]) ?? [];
     const passed = rows.filter((r) => r.result === "passed").length;
     const rejected = rows.filter((r) => r.result === "rejected").length;
@@ -88,9 +84,6 @@ export default async function DeskPage({
       firstPassRate: rows.length ? Math.round((passed / rows.length) * 100) : 0,
       topReasons: [...reasonCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([reason, count]) => ({ reason, count })),
     };
-    const hasCl = new Set(((checklists as { workspace_id: string }[]) ?? []).map((c) => c.workspace_id));
-    const { data: allWs } = await supabase.from("workspaces").select("id, name").order("name");
-    qaBrands = ((allWs as { id: string; name: string }[]) ?? []).map((w) => ({ id: w.id, name: w.name, hasChecklist: hasCl.has(w.id) }));
   }
 
   const awaiting = AWAITING[d.key];
@@ -152,7 +145,7 @@ export default async function DeskPage({
       </section>
 
       {/* QA desk — analytics + brand firewalls */}
-      {d.key === "qa" && qaAnalytics ? <QaDeskPanel analytics={qaAnalytics} brands={qaBrands} /> : null}
+      {d.key === "qa" && qaAnalytics ? <QaDeskPanel analytics={qaAnalytics} /> : null}
 
       {/* Social publish cockpit */}
       {d.key === "social" ? <SocialCockpit entries={socialEntries} metaConnected={hasMeta()} /> : null}

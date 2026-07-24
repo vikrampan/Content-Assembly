@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { QaAiResult, QaGroup } from "@/lib/types";
-import { runAiQa, saveQaChecklist, sendBackFromQa, submitForClientReview } from "./actions";
+import type { QaGroup } from "@/lib/types";
+import { saveQaChecklist, sendBackFromQa, submitForClientReview } from "./actions";
 
 const REJECT_REASONS = [
   "Off-brand voice",
@@ -23,7 +23,6 @@ export function QaFirewall({
   initialNotes,
   checklist,
   brandFirewall,
-  aiResult,
 }: {
   contentId: string;
   stage: string;
@@ -31,7 +30,6 @@ export function QaFirewall({
   initialNotes: Record<string, string> | null;
   checklist: QaGroup[];
   brandFirewall: boolean;
-  aiResult: QaAiResult | null;
 }) {
   const [checks, setChecks] = useState<Record<string, boolean>>(initial ?? {});
   const [notes, setNotes] = useState<Record<string, string>>(initialNotes ?? {});
@@ -44,7 +42,6 @@ export function QaFirewall({
   const router = useRouter();
 
   const total = useMemo(() => checklist.reduce((n, g) => n + g.checks.length, 0), [checklist]);
-  const aiByKey = useMemo(() => new Map((aiResult?.checks ?? []).map((c) => [c.key, c])), [aiResult]);
   const passed = useMemo(
     () => checklist.flatMap((g) => g.checks).filter((c) => checks[c.key] === true).length,
     [checks, checklist],
@@ -84,39 +81,17 @@ export function QaFirewall({
     });
   }
 
-  function runAi() {
-    setFeedback(null);
-    startTransition(async () => {
-      const res = await runAiQa(contentId);
-      if ("error" in res) setFeedback({ kind: "err", text: res.error });
-      else { setFeedback({ kind: "ok", text: "AI review complete." }); router.refresh(); }
-    });
-  }
-
   return (
     <section className="card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">QA Brand Firewall</h2>
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            {brandFirewall ? "This brand's own firewall — generated from its book." : "Default firewall — generate a brand-specific one on the QA desk."} Nothing ships until every check passes.
+            Check the post against the brand book below. Nothing ships until every check passes.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {!alreadyShipped ? (
-            <button type="button" onClick={runAi} disabled={pending} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--ink)" }}>
-              {pending ? "…" : "✦ AI review"}
-            </button>
-          ) : null}
-          <span className={`pill ${allPass ? "approved" : "pending"}`}>{passed}/{total} passed</span>
-        </div>
+        <span className={`pill ${allPass ? "approved" : "pending"}`}>{passed}/{total} passed</span>
       </div>
-
-      {aiResult ? (
-        <div className="mb-3 rounded-lg px-3 py-2 text-xs" style={aiResult.overall.verdict === "pass" ? { background: "var(--good-soft)", color: "var(--good)" } : { background: "rgba(192,85,63,.10)", color: "var(--danger)" }}>
-          <b>AI review: {aiResult.overall.verdict === "pass" ? "looks shippable" : "issues found"}.</b> {aiResult.overall.summary}
-        </div>
-      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {checklist.map((group) => (
@@ -135,13 +110,7 @@ export function QaFirewall({
                     />
                     <span className="flex-1 text-xs">
                       <span className="font-medium">{c.label}</span>
-                      {aiByKey.has(c.key) ? (
-                        <span className="ml-1.5 rounded px-1 py-0.5 text-[9px] font-bold uppercase" style={aiByKey.get(c.key)!.verdict === "pass" ? { background: "var(--good-soft)", color: "var(--good)" } : { background: "rgba(192,85,63,.14)", color: "var(--danger)" }}>AI {aiByKey.get(c.key)!.verdict}</span>
-                      ) : null}
                       <span className="block" style={{ color: "var(--muted)" }}>{c.detail}</span>
-                      {aiByKey.get(c.key)?.verdict === "flag" ? (
-                        <span className="mt-0.5 block" style={{ color: "var(--danger)" }}>⚠ {aiByKey.get(c.key)!.finding}</span>
-                      ) : null}
                     </span>
                     {!alreadyShipped ? (
                       <button

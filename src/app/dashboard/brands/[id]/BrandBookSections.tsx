@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { BrandBook } from "@/lib/types";
 import { saveBrandBook } from "../actions";
 import { SECTIONS, getPath, setPath, type Kind } from "./brandFields";
+import { InfoDot } from "@/components/InfoDot";
 
 const inputStyle = { background: "var(--panel-2)", border: "1px solid var(--line-2)", color: "var(--ink)" } as const;
 
@@ -15,7 +16,7 @@ export function BrandBookSections({ workspaceId, initial }: { workspaceId: strin
   const [pending, start] = useTransition();
   const router = useRouter();
 
-  function field(base: string, path: string, label: string, kind?: Kind) {
+  function field(base: string, path: string, label: string, kind?: Kind, hint?: string) {
     const full = `${base}.${path}`;
     const isList = kind === "list";
     const raw = getPath(book, full);
@@ -26,7 +27,7 @@ export function BrandBookSections({ workspaceId, initial }: { workspaceId: strin
     };
     return (
       <label key={full} className="block text-xs">
-        <span className="mb-1 block" style={{ color: "var(--muted)" }}>{label}</span>
+        <span className="mb-1 flex items-center" style={{ color: "var(--muted)" }}>{label}{hint ? <InfoDot text={hint} /> : null}</span>
         {kind === "area" || isList ? (
           <textarea value={String(val)} onChange={(e) => onChange(e.target.value)} rows={isList ? 3 : 2} placeholder={isList ? "one per line" : ""} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle} />
         ) : (
@@ -60,7 +61,7 @@ export function BrandBookSections({ workspaceId, initial }: { workspaceId: strin
           <div key={sec.base}>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>{sec.title}</div>
             <div className="grid gap-3 sm:grid-cols-2">
-              {sec.fields.map((f) => field(sec.base, f.path, f.label, f.kind))}
+              {sec.fields.map((f) => field(sec.base, f.path, f.label, f.kind, f.hint))}
             </div>
           </div>
         ))}

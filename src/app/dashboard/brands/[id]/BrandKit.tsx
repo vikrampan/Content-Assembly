@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Workspace } from "@/lib/types";
 import { deleteBrandAsset, registerBrandAsset, saveVisualKit } from "../actions";
+import { InfoDot } from "@/components/InfoDot";
 
 export interface BrandAssetView {
   id: string;
@@ -81,7 +82,7 @@ export function BrandKit({ brand, assets }: { brand: Workspace; assets: BrandAss
 
       {/* Logos */}
       <div>
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>Logos</div>
+        <div className="mb-2 flex items-center text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>Logos<InfoDot text="Upload the brand's logo files (PNG/SVG). The first one is the primary logo shown in the client portal." /></div>
         <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))" }}>
           {logos.map((a) => (
             <div key={a.id} className="group relative overflow-hidden rounded-xl" style={{ border: `1px solid ${a.isPrimaryLogo ? "var(--accent)" : "var(--line)"}` }}>
@@ -107,7 +108,7 @@ export function BrandKit({ brand, assets }: { brand: Workspace; assets: BrandAss
 
       {/* Fonts */}
       <div>
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>Font files</div>
+        <div className="mb-2 flex items-center text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>Font files<InfoDot text="Upload the brand's actual font files (.woff2/.otf/.ttf) so the client portal renders in the real brand typeface." /></div>
         <div className="flex flex-wrap gap-2">
           {fonts.map((a) => (
             <span key={a.id} className="group inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs" style={{ border: "1px solid var(--line)" }}>
@@ -124,7 +125,7 @@ export function BrandKit({ brand, assets }: { brand: Workspace; assets: BrandAss
 
       {/* Palette builder */}
       <div>
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>Full palette</div>
+        <div className="mb-2 flex items-center text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>Full palette<InfoDot text="All the brand's colours beyond primary/secondary — add extra swatches with names (e.g. 'Charcoal', 'Cream')." /></div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {brand.primary_hex ? <Swatch hex={brand.primary_hex} label="Primary" locked /> : null}
           {brand.secondary_hex ? <Swatch hex={brand.secondary_hex} label="Secondary" locked /> : null}
@@ -142,14 +143,14 @@ export function BrandKit({ brand, assets }: { brand: Workspace; assets: BrandAss
       {/* Accent + rules */}
       <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
         <label className="block text-xs">
-          <span className="mb-1 block" style={{ color: "var(--muted)" }}>Accent hex</span>
+          <span className="mb-1 flex items-center" style={{ color: "var(--muted)" }}>Accent hex<InfoDot text="A third highlight colour, used sparingly for buttons and emphasis." /></span>
           <div className="flex items-center gap-2">
             <input type="color" value={`#${(accent || "c8853f").replace(/^#/, "")}`} onChange={(e) => setAccent(e.target.value.replace("#", ""))} className="h-9 w-9 cursor-pointer rounded border-0 bg-transparent p-0" />
             <input value={accent} onChange={(e) => setAccent(e.target.value)} placeholder="C8853F" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle} />
           </div>
         </label>
         <label className="block text-xs">
-          <span className="mb-1 block" style={{ color: "var(--muted)" }}>Logo usage rules — clear space, min size, don&apos;ts</span>
+          <span className="mb-1 flex items-center" style={{ color: "var(--muted)" }}>Logo usage rules<InfoDot text="How the logo may/may not be used — clear space around it, minimum size, and what never to do (recolour, stretch, busy backgrounds)." /></span>
           <textarea value={rules} onChange={(e) => setRules(e.target.value)} rows={3} placeholder="e.g. Keep clear space of at least the logo's cap-height on all sides. Never recolour, stretch, or place on busy imagery." className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle} />
         </label>
       </div>

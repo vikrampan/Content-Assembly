@@ -15,7 +15,7 @@ const FN_LABEL: Record<string, string> = {
   image: "Image Desk",
   audio: "Audio Desk",
   qa: "Quality Desk",
-  social: "Social Desk",
+  social: "Account Manager",
 };
 
 function initialsOf(name: string) {

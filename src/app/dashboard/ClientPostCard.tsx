@@ -2,7 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { clientReview, suggestPost } from "./actions";
+import { clientReview, requestPostChange, suggestPost } from "./actions";
+
+const CHANGE_TYPES = [
+  { key: "content", label: "The caption / words" },
+  { key: "media", label: "The photo / video" },
+  { key: "editing", label: "The design / edit" },
+  { key: "combination", label: "A mix of things" },
+] as const;
 
 export interface Creative { url: string; isVideo: boolean }
 export interface ThreadMsg { id: string; body: string; mine: boolean; at: string }
@@ -20,6 +27,7 @@ export function ClientPostCard({
   const [open, setOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [comment, setComment] = useState("");
+  const [changeType, setChangeType] = useState<"content" | "media" | "editing" | "combination">("content");
   const [chat, setChat] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -27,10 +35,18 @@ export function ClientPostCard({
   const hero = creatives[0];
   const dateLabel = plannedDate ? new Date(plannedDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
 
-  function act(decision: "approve" | "request_changes") {
+  function approve() {
     setMsg(null);
     start(async () => {
-      const res = await clientReview(contentId, decision, comment);
+      const res = await clientReview(contentId, "approve", "");
+      if ("error" in res) setMsg(res.error);
+      else { setOpen(false); router.refresh(); }
+    });
+  }
+  function requestChange() {
+    setMsg(null);
+    start(async () => {
+      const res = await requestPostChange(contentId, changeType, comment);
       if ("error" in res) setMsg(res.error);
       else { setOpen(false); router.refresh(); }
     });
@@ -61,7 +77,7 @@ export function ClientPostCard({
           </div>
           {hook ? <p className="text-sm font-semibold leading-snug">{hook}</p> : null}
           <div className="mt-auto flex gap-2 pt-2">
-            <button type="button" disabled={pending} onClick={() => act("approve")} className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--good)" }}>Approve</button>
+            <button type="button" disabled={pending} onClick={approve} className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--good)" }}>Approve</button>
             <button type="button" onClick={() => setOpen(true)} className="rounded-lg px-3 py-2 text-sm font-semibold" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>View &amp; discuss</button>
           </div>
         </div>
@@ -134,15 +150,22 @@ export function ClientPostCard({
             <div className="border-t p-4" style={{ borderColor: "var(--line)" }}>
               {rejecting ? (
                 <div className="space-y-2">
-                  <textarea autoFocus value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="What would you like changed?" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--panel-2)", border: "1px solid var(--line-2)", color: "var(--ink)" }} />
+                  <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>What needs to change?</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CHANGE_TYPES.map((t) => (
+                      <button key={t.key} type="button" onClick={() => setChangeType(t.key)} className="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+                        style={changeType === t.key ? { background: "var(--accent)", color: "#fff" } : { background: "var(--panel-2)", border: "1px solid var(--line-2)", color: "var(--ink)" }}>{t.label}</button>
+                    ))}
+                  </div>
+                  <textarea autoFocus value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Tell the team what to change…" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--panel-2)", border: "1px solid var(--line-2)", color: "var(--ink)" }} />
                   <div className="flex gap-2">
-                    <button type="button" disabled={pending || !comment.trim()} onClick={() => act("request_changes")} className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "var(--danger)" }}>Send request</button>
+                    <button type="button" disabled={pending || !comment.trim()} onClick={requestChange} className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "var(--danger)" }}>Send request</button>
                     <button type="button" onClick={() => setRejecting(false)} className="rounded-lg px-3 py-2 text-sm font-semibold" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>Cancel</button>
                   </div>
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <button type="button" disabled={pending} onClick={() => act("approve")} className="flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--good)" }}>Approve this post</button>
+                  <button type="button" disabled={pending} onClick={approve} className="flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--good)" }}>Approve this post</button>
                   <button type="button" onClick={() => setRejecting(true)} className="rounded-lg px-4 py-2.5 text-sm font-semibold" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>Request changes</button>
                 </div>
               )}
