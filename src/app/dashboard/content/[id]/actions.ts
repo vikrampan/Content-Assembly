@@ -9,6 +9,7 @@ import { STAGE_LABEL, deskStage, isValidStage, nextStage, prevStage } from "@/li
 import { draftCopy } from "@/lib/ai/strategist";
 import { decideFormat, type Objective, type Medium } from "@/lib/mendly/strategy";
 import { notifyClientReviewReady } from "@/lib/email/resend";
+import { notifyClientOf, notifyDepartments } from "@/lib/notify";
 import type { ContentItem, Workspace } from "@/lib/types";
 
 export type ActionResult = { ok: true; message?: string } | { error: string };
@@ -374,7 +375,10 @@ export async function sendBackFromQa(
     .update({ stage: "production", assignment_note: `QA rejected: ${composed}`, qa_reject_reasons: reasons.join(",") })
     .eq("id", contentId);
   if (error) return { error: error.message };
-  if (item) await supabase.from("qa_reviews").insert({ content_id: contentId, workspace_id: item.workspace_id, reviewer_id: session.userId, result: "rejected", reasons: composed });
+  if (item) {
+    await supabase.from("qa_reviews").insert({ content_id: contentId, workspace_id: item.workspace_id, reviewer_id: session.userId, result: "rejected", reasons: composed });
+    await notifyDepartments(["content", "design", "video", "image", "audio"], { workspaceId: item.workspace_id, type: "qa_reject", title: "QA sent a post back", body: composed.slice(0, 80), link: `/dashboard/content/${contentId}` });
+  }
   await reval(contentId);
   return { ok: true, message: "Sent back to Production for rework." };
 }
@@ -448,8 +452,9 @@ export async function submitForClientReview(
 
   await supabase.from("qa_reviews").insert({ content_id: contentId, workspace_id: item.workspace_id, reviewer_id: session.userId, result: "passed", passed: requiredKeys.length, total: requiredKeys.length });
 
-  // Best-effort: email the client that something needs their approval.
+  // Best-effort: email + in-app notify the client that something needs approval.
   await notifyClientReviewReady(item.workspace_id, item.title);
+  await notifyClientOf(item.workspace_id, { type: "review", title: "A post is ready for your approval", body: item.title, link: "/dashboard/approvals" });
 
   await reval(contentId);
   return { ok: true, message: "Passed the firewall — sent to the client for sign-off." };
@@ -720,4 +725,27 @@ export async function publishScheduled(scheduledId: string, contentId: string): 
   await reval(contentId);
   revalidatePath("/dashboard/desk/social");
   return { ok: true, message: res.ok ? "Published." : "Marked live (connect Meta for auto-publish)." };
+}
+
+// ===========================================================================
+// Ownership (Phase 3) — assign a card to a person + set a due date.
+// ===========================================================================
+import { notifyUsers } from "@/lib/notify";
+
+export async function setOwnership(
+  contentId: string,
+  assignedTo: string | null,
+  dueDate: string | null,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const supabase = await createClient();
+  const { data: prev } = await supabase.from("content_items").select("assigned_to, title, workspace_id").eq("id", contentId).single<{ assigned_to: string | null; title: string; workspace_id: string }>();
+  const { error } = await supabase.from("content_items").update({ assigned_to: assignedTo, due_date: dueDate || null }).eq("id", contentId);
+  if (error) return { error: error.message };
+  if (assignedTo && assignedTo !== prev?.assigned_to && assignedTo !== session.userId) {
+    await notifyUsers([assignedTo], { workspaceId: prev?.workspace_id, type: "assigned", title: "You were assigned a post", body: prev?.title, link: `/dashboard/content/${contentId}` });
+  }
+  await reval(contentId);
+  return { ok: true, message: "Saved." };
 }

@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { navFor, userFunction } from "@/lib/mendly/access";
 import { Sidebar } from "@/components/Sidebar";
+import { CommandPalette } from "@/components/CommandPalette";
 
 const FN_LABEL: Record<string, string> = {
   admin: "Agency Control",
@@ -51,6 +52,12 @@ export default async function DashboardLayout({
     if (count && count > 0) nav = nav.map((n) => (n.label === "Approvals" ? { ...n, badge: count } : n));
   }
 
+  // Recent notifications for the bell.
+  const supabase = await createClient();
+  const { data: notifRaw } = await supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(20);
+  const notifications = (notifRaw as import("@/lib/types").Notification[]) ?? [];
+  const unread = notifications.filter((n) => !n.read).length;
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -60,12 +67,15 @@ export default async function DashboardLayout({
         userName={displayName}
         role={FN_LABEL[fn] ?? fn}
         initials={initialsOf(displayName)}
+        notifications={notifications}
+        unread={unread}
       />
       <main className="min-w-0">
         <div className="mx-auto max-w-[1200px] px-[clamp(18px,4vw,36px)] py-[clamp(20px,3.5vw,32px)] pt-14 md:pt-[clamp(20px,3.5vw,32px)]">
           {children}
         </div>
       </main>
+      {fn !== "client" ? <CommandPalette /> : null}
     </div>
   );
 }

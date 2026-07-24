@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { isValidStage } from "@/lib/mendly/stages";
 import { notifyChangesRequested } from "@/lib/email/resend";
+import { notifyClientOf, notifyDepartments } from "@/lib/notify";
 
 /** Client signs off (or requests changes) on a month's calendar. */
 export async function reviewCalendar(
@@ -77,14 +78,12 @@ export async function clientReview(
 
   if (error) return { error: error.message };
 
-  // Best-effort: nudge the team when the client asks for changes.
+  const { data: item } = await supabase.from("content_items").select("title, workspace_id").eq("id", contentId).single<{ title: string; workspace_id: string }>();
   if (decision === "request_changes") {
-    const { data: item } = await supabase
-      .from("content_items")
-      .select("title")
-      .eq("id", contentId)
-      .single<{ title: string }>();
     await notifyChangesRequested(item?.title ?? "a post", comment?.trim() ?? "");
+  } else if (decision === "approve") {
+    // Approved → hand off to the Account Manager to schedule.
+    await notifyDepartments(["social"], { workspaceId: item?.workspace_id, type: "approved", title: "Client approved a post", body: item?.title, link: `/dashboard/content/${contentId}` });
   }
 
   revalidatePath("/dashboard");
@@ -108,11 +107,36 @@ export async function requestPostChange(
   });
   if (error) return { error: error.message };
 
-  const { data: item } = await supabase.from("content_items").select("title").eq("id", contentId).single<{ title: string }>();
+  const { data: item } = await supabase.from("content_items").select("title, workspace_id").eq("id", contentId).single<{ title: string; workspace_id: string }>();
   await notifyChangesRequested(item?.title ?? "a post", `[${changeType}] ${note.trim()}`);
+  // Route the notification to the desk that will do the rework.
+  const depts = changeType === "content" || changeType === "combination" ? ["content"] : ["design", "video", "image", "audio"];
+  await notifyDepartments(depts, { workspaceId: item?.workspace_id, type: "change", title: `Client change (${changeType})`, body: item?.title, link: `/dashboard/content/${contentId}` });
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/plan");
+  return { ok: true };
+}
+
+/** Global search across brands + posts (staff only; RLS scopes results). */
+export async function globalSearch(q: string): Promise<{ brands: { id: string; name: string }[]; posts: { id: string; title: string; stage: string }[] }> {
+  const session = await requireSession();
+  const term = q.trim();
+  if (session.role === "client" || term.length < 2) return { brands: [], posts: [] };
+  const supabase = await createClient();
+  const [{ data: b }, { data: p }] = await Promise.all([
+    supabase.from("workspaces").select("id, name").ilike("name", `%${term}%`).limit(6),
+    supabase.from("content_items").select("id, title, stage").ilike("title", `%${term}%`).order("updated_at", { ascending: false }).limit(10),
+  ]);
+  return { brands: (b as { id: string; name: string }[]) ?? [], posts: (p as { id: string; title: string; stage: string }[]) ?? [] };
+}
+
+/** Mark all of the current user's notifications read. */
+export async function markNotificationsRead(): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("notifications").update({ read: true }).eq("read", false);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 
@@ -145,6 +169,14 @@ export async function suggestPost(
     internal: false,
   });
   if (error) return { error: error.message };
+
+  // Notify the other side of the conversation.
+  if (session.role === "client") {
+    await notifyDepartments(["content", "design", "video"], { workspaceId: item.workspace_id, type: "message", title: "Client sent a message", body: text.slice(0, 80), link: `/dashboard/content/${contentId}` });
+  } else {
+    await notifyClientOf(item.workspace_id, { type: "reply", title: "Your team replied", body: text.slice(0, 80), link: `/dashboard/plan` });
+  }
+
   revalidatePath("/dashboard");
   revalidatePath(`/dashboard/content/${contentId}`);
   return { ok: true };

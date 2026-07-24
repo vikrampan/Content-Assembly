@@ -185,6 +185,7 @@ export interface ContentItem {
   pillar_id: string | null;
   campaign: string | null;
   change_request: string | null;
+  due_date: string | null;
   // 0018 — copy engineering
   triggers: string[];
   framework: string | null;
@@ -239,6 +240,18 @@ export interface ContentVariant {
   workspace_id: string;
   platform: string;
   body: string;
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  workspace_id: string | null;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read: boolean;
   created_at: string;
 }
 

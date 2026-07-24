@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "@/app/login/actions";
+import type { Notification } from "@/lib/types";
+import { NotificationBell } from "./NotificationBell";
 
 export interface NavEntry {
   href: string;
@@ -62,6 +64,8 @@ export function Sidebar({
   userName,
   role,
   initials,
+  notifications = [],
+  unread = 0,
 }: {
   nav: NavEntry[];
   brandName: string;
@@ -69,6 +73,8 @@ export function Sidebar({
   userName: string;
   role: string;
   initials: string;
+  notifications?: Notification[];
+  unread?: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -130,7 +136,9 @@ export function Sidebar({
               <div style={{ fontSize: ".85rem", fontWeight: 600, color: "var(--side-ink)", lineHeight: 1.1 }} className="truncate">{userName}</div>
               <div style={{ fontSize: ".68rem", color: "var(--side-muted)" }} className="truncate">{role}</div>
             </div>
-            <form action={signOut} className="ml-auto">
+            <div className="ml-auto flex items-center gap-1">
+            <NotificationBell items={notifications} unread={unread} />
+            <form action={signOut}>
               <button
                 type="submit"
                 title="Sign out"
@@ -140,6 +148,7 @@ export function Sidebar({
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
               </button>
             </form>
+            </div>
           </div>
         </div>
       </aside>

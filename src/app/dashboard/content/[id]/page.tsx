@@ -7,6 +7,7 @@ import { OBJECTIVE_LABELS, type Objective } from "@/lib/mendly/strategy";
 import type { Asset, ContentItem, ContentVariant, ContentVersion, Comment, QaGroup, ScheduledPost, Workspace } from "@/lib/types";
 import { QA_FIREWALL } from "@/lib/mendly/pipeline";
 import { AssignPanel } from "./AssignPanel";
+import { OwnershipPanel, type StaffOption } from "./OwnershipPanel";
 import { ContentEditor } from "./ContentEditor";
 import { CopyStudio } from "./CopyStudio";
 import { SuggestionThread } from "./SuggestionThread";
@@ -64,6 +65,9 @@ export default async function ContentDetailPage({
   const { data: { user: me } } = await supabase.auth.getUser();
   const meId = me?.id ?? null;
 
+  const { data: staffRows } = await supabase.from("profiles").select("id, full_name, department").in("account_type", ["admin", "team_incharge"]);
+  const staff: StaffOption[] = ((staffRows as { id: string; full_name: string | null; department: string | null }[]) ?? []).map((s) => ({ id: s.id, name: s.full_name ?? "Staff", department: s.department }));
+
   const deliverables: DeliverableView[] = await Promise.all(
     assets.map(async (a) => {
       const { data } = await supabase.storage.from("assets").createSignedUrl(a.storage_path, 3600);
@@ -95,6 +99,9 @@ export default async function ContentDetailPage({
 
       {/* Pipeline routing / hand-off. */}
       <AssignPanel contentId={item.id} stage={item.stage} note={item.assignment_note} fn={session.fn} />
+
+      {/* Ownership — assignee + due date. */}
+      <OwnershipPanel contentId={item.id} assignedTo={item.assigned_to} dueDate={item.due_date} staff={staff} />
 
       {/* The brief that travels with the asset (Stage 04). */}
       <section className="card grid gap-4 p-4 sm:grid-cols-2">

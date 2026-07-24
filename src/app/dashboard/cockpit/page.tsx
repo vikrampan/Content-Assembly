@@ -37,6 +37,8 @@ export default async function CockpitPage() {
   const publishedThisMonth = items.filter((i) => i.stage === "published" && i.updated_at >= monthStart).length;
   const awaitingClient = count(["client_review"]);
   const inProduction = count(["content", "production"]);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const overdue = items.filter((i) => i.due_date && i.due_date < todayStr && i.stage !== "published").length;
 
   // QA first-pass rate
   const qaPassed = reviews.filter((r) => r.result === "passed").length;
@@ -83,7 +85,7 @@ export default async function CockpitPage() {
         <Kpi label="Active posts" value={items.filter((i) => i.stage !== "published").length} />
         <Kpi label="In production" value={inProduction} />
         <Kpi label="Awaiting client" value={awaitingClient} />
-        <Kpi label="Published (mo)" value={publishedThisMonth} />
+        <Kpi label="Overdue" value={overdue} hint={overdue > 0 ? "past due date" : "on track"} />
         <Kpi label="QA first-pass" value={`${firstPass}%`} hint={`${qaRejected} sent back`} />
       </div>
 
