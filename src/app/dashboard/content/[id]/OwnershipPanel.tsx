@@ -18,6 +18,14 @@ export function OwnershipPanel({ contentId, assignedTo, dueDate, staff }: { cont
   const dirty = assignee !== (assignedTo ?? "") || due !== (dueDate ?? "");
   const overdue = due && new Date(due) < new Date(new Date().toDateString());
 
+  // Group the assignable pool by department so it's clear who does what.
+  const grouped = staff.reduce<Record<string, StaffOption[]>>((m, s) => {
+    const k = s.department ?? "team";
+    (m[k] ??= []).push(s);
+    return m;
+  }, {});
+  const groups = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
+
   function save() {
     setMsg(null);
     start(async () => {
@@ -35,7 +43,11 @@ export function OwnershipPanel({ contentId, assignedTo, dueDate, staff }: { cont
           <span className="mb-1 block" style={{ color: "var(--muted)" }}>Assigned to</span>
           <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle}>
             <option value="">— unassigned —</option>
-            {staff.map((s) => <option key={s.id} value={s.id}>{s.name}{s.department ? ` · ${s.department}` : ""}</option>)}
+            {groups.map(([dept, people]) => (
+              <optgroup key={dept} label={dept.charAt(0).toUpperCase() + dept.slice(1)}>
+                {people.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </optgroup>
+            ))}
           </select>
         </label>
         <label className="block text-xs">

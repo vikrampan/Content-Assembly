@@ -16,25 +16,28 @@ interface FormatRow {
   reel: string;
 }
 
+// Brand-agnostic creative directions. `{subject}` is filled per brand (e.g.
+// "the coffee", "each piece", "the skincare") so the *direction* stays
+// universal while the wording fits the brand. Defaults to "the product".
 export const OBJECTIVES: Record<Objective, FormatRow> = {
   launch: {
     goal: "Launch something new",
-    post: "Product hero — one dish, macro detail, zero distraction",
-    reel: "Macro food reel — texture in extreme close-up",
+    post: "Product hero — {subject} in macro detail, zero distraction",
+    reel: "Hero reel — {subject} in extreme close-up, texture-forward",
   },
   educate: {
     goal: "Educate or tell a story",
-    post: "Carousel — sourcing, process, people across slides",
-    reel: "Behind-the-scenes reel — the craft on camera",
+    post: "Carousel — the story across slides: origin, process, the people",
+    reel: "Behind-the-scenes reel — how {subject} is made, on camera",
   },
   vibe: {
     goal: "Build vibe & immersion",
-    post: "Ambience post — light, wood, the corner seat",
-    reel: "ASMR sensory reel — the sounds of the cafe",
+    post: "Ambience post — the world the brand lives in",
+    reel: "Sensory reel — the mood and motion around {subject}",
   },
   urgency: {
     goal: "Drive urgency & reach",
-    post: "Offer / FOMO post — finite batches, hard deadlines",
+    post: "Offer / FOMO post — finite drops, a hard deadline",
     reel: "Trend-jack reel — riding a rising audio early",
   },
 };
@@ -66,9 +69,11 @@ export interface FormatDecision {
 export function decideFormat(
   objective: Objective,
   medium: Medium,
+  subject?: string | null,
 ): FormatDecision {
   const row = OBJECTIVES[objective];
-  const formatType = medium === "reel" ? row.reel : row.post;
+  const noun = (subject && subject.trim()) || "the product";
+  const formatType = (medium === "reel" ? row.reel : row.post).replace(/\{subject\}/g, noun);
   // The educate/post cell is a carousel; everything else is a single post/reel.
   const dbFormat =
     medium === "reel"

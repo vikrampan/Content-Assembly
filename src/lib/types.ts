@@ -47,6 +47,9 @@ export interface Workspace {
   do_rules: string | null;
   never_rules: string | null;
   locations: string | null;
+  // Short noun for what the brand makes ("the coffee", "each piece") — fills
+  // {subject} in the format engine so directions read on-brand per client.
+  subject: string | null;
   // 0014 — Brand Designer visual kit
   accent_hex: string | null;
   palette: { hex: string; name?: string }[] | null;

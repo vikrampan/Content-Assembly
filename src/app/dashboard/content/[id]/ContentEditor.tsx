@@ -142,7 +142,7 @@ export function ContentEditor({ item, versions }: { item: ContentItem; versions:
           <textarea className={inputCls} style={inputStyle} rows={2} value={hook} onChange={(e) => setHook(e.target.value)} />
         </label>
         <label className="block text-xs">
-          <span className="mb-1 block" style={{ color: "var(--muted)" }}>Value bridge — taste / sourcing / experience</span>
+          <span className="mb-1 block" style={{ color: "var(--muted)" }}>Value bridge — the proof: quality, substance, experience</span>
           <textarea className={inputCls} style={inputStyle} rows={3} value={bridge} onChange={(e) => setBridge(e.target.value)} />
         </label>
         <label className="block text-xs">

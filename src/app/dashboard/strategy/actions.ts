@@ -88,7 +88,7 @@ export async function runStrategyDesk(input: {
     }
   }
 
-  const decision = decideFormat(input.objective, input.medium);
+  const decision = decideFormat(input.objective, input.medium, ws.subject);
   const copy = await draftCopy(ws, input.brief, decision, persona);
 
   // Meter the spend so admin can see who used how much, on what.
@@ -225,12 +225,16 @@ export async function commitMonthPlan(input: {
   if (input.posts.length === 0) return { error: "Nothing to commit." };
   const supabase = await createClient();
 
-  // Map pillar names → ids for this brand.
-  const { data: pillarRows } = await supabase.from("content_pillars").select("id, name").eq("workspace_id", input.workspaceId);
+  // Map pillar names → ids for this brand, and read the brand's subject noun.
+  const [{ data: pillarRows }, { data: wsRow }] = await Promise.all([
+    supabase.from("content_pillars").select("id, name").eq("workspace_id", input.workspaceId),
+    supabase.from("workspaces").select("subject").eq("id", input.workspaceId).maybeSingle<{ subject: string | null }>(),
+  ]);
   const pillarId = new Map(((pillarRows as ContentPillar[]) ?? []).map((p) => [p.name.toLowerCase(), p.id]));
+  const subject = wsRow?.subject ?? null;
 
   const rows = input.posts.map((p) => {
-    const decision = decideFormat(p.objective, p.medium);
+    const decision = decideFormat(p.objective, p.medium, subject);
     const date = `${input.year}-${String(input.month + 1).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
     return {
       workspace_id: input.workspaceId,

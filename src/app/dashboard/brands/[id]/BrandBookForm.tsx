@@ -37,7 +37,7 @@ type Field = keyof Pick<
   Workspace,
   | "name" | "slug" | "primary_hex" | "secondary_hex" | "headline_font"
   | "body_font" | "voice_tone" | "voice_never" | "photography_style"
-  | "do_rules" | "never_rules" | "locations" | "ai_style_suffix"
+  | "do_rules" | "never_rules" | "locations" | "ai_style_suffix" | "subject"
 >;
 
 export function BrandBookForm({ brand }: { brand: Workspace }) {
@@ -55,6 +55,7 @@ export function BrandBookForm({ brand }: { brand: Workspace }) {
     never_rules: brand.never_rules ?? "",
     locations: brand.locations ?? "",
     ai_style_suffix: brand.ai_style_suffix ?? "",
+    subject: brand.subject ?? "",
   });
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -97,6 +98,7 @@ export function BrandBookForm({ brand }: { brand: Workspace }) {
           </label>
           {Text("headline_font", "Headline font", "The font used for big titles and headlines.", "Editorial serif")}
           {Text("body_font", "Body font", "The font used for normal running text.", "Clean modern sans-serif")}
+          {Text("subject", "Brand subject", "What the brand makes, as a short noun — the strategy engine drops this into content directions so they read on-brand (e.g. 'the coffee', 'each piece', 'the skincare'). Defaults to 'the product'.", "the product")}
         </div>
       </section>
 

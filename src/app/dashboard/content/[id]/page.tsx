@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { STAGE_LABEL } from "@/lib/mendly/stages";
-import { OBJECTIVE_LABELS, type Objective } from "@/lib/mendly/strategy";
+import { OBJECTIVE_LABELS, decideFormat, type Objective, type Medium } from "@/lib/mendly/strategy";
 import type { Asset, ContentItem, ContentVariant, ContentVersion, Comment, QaGroup, ScheduledPost, Workspace } from "@/lib/types";
 import { QA_FIREWALL } from "@/lib/mendly/pipeline";
 import { AssignPanel } from "./AssignPanel";
@@ -108,18 +108,26 @@ export default async function ContentDetailPage({
   };
   const hasMain = V.conversation || V.copy || V.studio || V.deliverables || V.qa || V.scheduler;
 
+  // Derive the format direction live from the objective + medium so wording
+  // always reflects the current (brand-agnostic) mapping, not what was frozen
+  // into the row at commit time. `subject` (per brand) personalises it.
+  const medium: Medium = item.format === "reel" ? "reel" : "post";
+  const decision = item.objective ? decideFormat(item.objective as Objective, medium, ws?.subject ?? null) : null;
+  const formatType = decision?.formatType ?? item.format_type;
+  const formatWhy = decision?.rationale ?? item.format_rationale;
+
   const brief = (
     <section className="card p-4">
       <div className="mb-3 text-sm font-semibold">The brief</div>
       <div className="space-y-3">
         <Field label="Objective" value={item.objective ? (OBJECTIVE_LABELS[item.objective as Objective] ?? item.objective) : null} />
-        <Field label="Chosen format" value={item.format_type} />
+        <Field label="Chosen format" value={formatType} />
         <Field label="Content pillar" value={pillarRow?.name ?? null} />
         <Field label="Campaign" value={item.campaign} />
-        {item.format_rationale ? (
+        {formatWhy ? (
           <div>
             <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Why this format</div>
-            <div className="mt-0.5 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>{item.format_rationale}</div>
+            <div className="mt-0.5 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>{formatWhy}</div>
           </div>
         ) : null}
       </div>

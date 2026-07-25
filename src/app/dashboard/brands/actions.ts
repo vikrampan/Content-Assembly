@@ -118,6 +118,7 @@ export interface BrandBookInput {
   never_rules: string | null;
   locations: string | null;
   ai_style_suffix: string | null;
+  subject: string | null;
 }
 
 const HEX_RE = /^[0-9a-fA-F]{6}$/;
@@ -161,6 +162,7 @@ export async function updateBrandBook(input: BrandBookInput): Promise<ActionResu
       never_rules: norm(input.never_rules),
       locations: norm(input.locations),
       ai_style_suffix: norm(input.ai_style_suffix),
+      subject: norm(input.subject),
     })
     .eq("id", input.id);
 
