@@ -56,6 +56,10 @@ export default async function ContentDetailPage({
     supabase.from("scheduled_posts").select("*").eq("content_id", id),
   ]);
 
+  const { data: pillarRow } = item.pillar_id
+    ? await supabase.from("content_pillars").select("name").eq("id", item.pillar_id).maybeSingle<{ name: string }>()
+    : { data: null };
+
   const versions = (versionRows as ContentVersion[]) ?? [];
   const assets = (assetRows as Asset[]) ?? [];
   const suggestions = (commentRows as Comment[]) ?? [];
@@ -107,6 +111,8 @@ export default async function ContentDetailPage({
       <section className="card grid gap-4 p-4 sm:grid-cols-2">
         <Field label="Objective" value={item.objective ? (OBJECTIVE_LABELS[item.objective as Objective] ?? item.objective) : null} />
         <Field label="Chosen format" value={item.format_type} />
+        <Field label="Content pillar" value={pillarRow?.name ?? null} />
+        <Field label="Campaign" value={item.campaign} />
         {item.format_rationale ? (
           <div className="sm:col-span-2">
             <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Why this format</div>

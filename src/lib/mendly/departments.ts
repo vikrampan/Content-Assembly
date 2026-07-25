@@ -22,7 +22,7 @@ export const DEPARTMENTS: Department[] = [
   { key: "strategy", label: "Strategy", blurb: "Plans the month, then locks content & format for each post.", stage: "Stage 04 · Hub",
     statuses: ["ideation", "research"], toolHref: "/dashboard/strategy", toolLabel: "Open Strategy Desk" },
   { key: "content", label: "Content", blurb: "Decides the angle and writes the copy — the live AI desk.", stage: "Stage 05",
-    statuses: ["copywriting"], toolHref: "/dashboard/strategy", toolLabel: "Open Strategy Desk" },
+    statuses: ["copywriting"] },
   { key: "design", label: "Design", blurb: "Builds posts & carousels on the brand grid.", stage: "Stage 05",
     statuses: ["visuals", "assembly"] },
   { key: "video", label: "Video / Editing", blurb: "Cuts reels engineered for retention.", stage: "Stage 05",
