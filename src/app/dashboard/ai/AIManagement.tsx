@@ -14,6 +14,7 @@ export interface IntegrationView {
 export interface MemberRow {
   id: string;
   name: string;
+  role?: string;
   limit: number;
   usedTokens: number;
   usedCost: number;
@@ -163,7 +164,10 @@ function BudgetRow({ member }: { member: MemberRow }) {
   return (
     <div className="rounded-xl border border-black/10 bg-white/60 p-3 dark:border-white/10 dark:bg-white/5">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-[140px] text-sm font-medium">{member.name}</div>
+        <div className="min-w-[140px] text-sm font-medium">
+          {member.name}
+          {member.role ? <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ background: member.role === "Client" ? "var(--accent-soft)" : "var(--panel-2)", color: member.role === "Client" ? "var(--accent-ink)" : "var(--faint)" }}>{member.role}</span> : null}
+        </div>
         <div className="min-w-[150px] flex-1">
           <div className="flex items-center justify-between text-[11px] opacity-60">
             <span>{fmt(member.usedTokens)} used</span>

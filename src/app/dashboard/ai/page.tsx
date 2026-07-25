@@ -1,6 +1,7 @@
 import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { monthStartISO } from "@/lib/ai/usage";
+import { DEFAULT_CLIENT_MONTHLY_TOKENS } from "@/lib/ai/clientAssist";
 import type { Profile } from "@/lib/types";
 import { AIManagement, type IntegrationView, type MemberRow, type UsageByPurpose } from "./AIManagement";
 
@@ -57,11 +58,23 @@ export default async function AIPage() {
   }
 
   const budgetMap = new Map(((budgets as { user_id: string; monthly_token_limit: number }[]) ?? []).map((b) => [b.user_id, b.monthly_token_limit]));
-  const team = ((profiles as Profile[]) ?? []).filter((p) => p.account_type === "team_incharge");
-  const members: MemberRow[] = team.map((p) => {
-    const u = perUser.get(p.id) ?? { tokens: 0, cost: 0 };
-    return { id: p.id, name: p.full_name ?? "—", limit: budgetMap.get(p.id) ?? 0, usedTokens: u.tokens, usedCost: u.cost };
-  });
+  // Staff (team leads) AND clients — clients now use AI in their portal, so admin
+  // caps each one here. Clients are never unlimited: no row → the strict default.
+  const managed = ((profiles as Profile[]) ?? []).filter((p) => p.account_type === "team_incharge" || p.account_type === "client");
+  const members: MemberRow[] = managed
+    .map((p) => {
+      const u = perUser.get(p.id) ?? { tokens: 0, cost: 0 };
+      const isClient = p.account_type === "client";
+      return {
+        id: p.id,
+        name: p.full_name ?? "—",
+        role: isClient ? "Client" : "Staff",
+        limit: budgetMap.get(p.id) ?? (isClient ? DEFAULT_CLIENT_MONTHLY_TOKENS : 0),
+        usedTokens: u.tokens,
+        usedCost: u.cost,
+      };
+    })
+    .sort((a, b) => (a.role === b.role ? b.usedTokens - a.usedTokens : a.role === "Client" ? -1 : 1));
 
   const byPurpose: UsageByPurpose[] = [...perPurpose.entries()]
     .map(([purpose, v]) => ({ purpose, tokens: v.tokens, cost: v.cost }))

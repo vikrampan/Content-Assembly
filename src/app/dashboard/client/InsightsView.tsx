@@ -1,5 +1,6 @@
 import type { ContentItem, PostMetric } from "@/lib/types";
 import { ClientAnalytics } from "../ClientAnalytics";
+import { AiCard } from "./AiCard";
 import { accentOf, brandFonts, BrandStyle, clientWorkspace, SectionHeader } from "./shared";
 
 const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
@@ -46,6 +47,9 @@ export async function InsightsView() {
     <div className="space-y-6">
       <BrandStyle faces={faces} />
       <SectionHeader title="Analytics" subtitle="How your posts are performing." family={headlineFamily} />
+
+      {/* AI: turn the numbers into plain English + next steps */}
+      <AiCard kind="insights" title="Explain my results" subtitle="What worked, why, and what to do next" cta="✦ Explain" />
 
       {/* Overall */}
       <ClientAnalytics metrics={metrics} posts={posts} accent={accent} />

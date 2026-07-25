@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { navFor, userFunction } from "@/lib/mendly/access";
 import { Sidebar } from "@/components/Sidebar";
 import { CommandPalette } from "@/components/CommandPalette";
+import { Concierge } from "./client/Concierge";
+import { ClientTour } from "./client/ClientTour";
 
 const FN_LABEL: Record<string, string> = {
   admin: "Agency Control",
@@ -76,6 +78,7 @@ export default async function DashboardLayout({
         </div>
       </main>
       {fn !== "client" ? <CommandPalette /> : null}
+      {fn === "client" ? <><Concierge brandName={subtitle} /><ClientTour brandName={subtitle} /></> : null}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { clientReview, requestPostChange, suggestPost } from "./actions";
+import { aiExplainPost } from "./aiClient";
 
 const CHANGE_TYPES = [
   { key: "content", label: "The caption / words" },
@@ -30,8 +31,17 @@ export function ClientPostCard({
   const [changeType, setChangeType] = useState<"content" | "media" | "editing" | "combination">("content");
   const [chat, setChat] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [why, setWhy] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [whyLoading, startWhy] = useTransition();
   const router = useRouter();
+
+  function explain() {
+    startWhy(async () => {
+      const res = await aiExplainPost(contentId);
+      setWhy(res.text ?? res.error ?? "Couldn't explain that right now.");
+    });
+  }
   const hero = creatives[0];
   const dateLabel = plannedDate ? new Date(plannedDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
 
@@ -112,6 +122,16 @@ export function ClientPostCard({
                   {bridge ? <p style={{ color: "var(--muted)" }}>{bridge}</p> : null}
                   {cta ? <p className="font-semibold" style={{ color: "var(--accent-ink)" }}>{cta}</p> : null}
                 </div>
+                {/* AI: why this post exists, in plain language */}
+                {why ? (
+                  <div className="rounded-lg p-3 text-xs leading-relaxed" style={{ background: "var(--accent-soft)", color: "var(--ink)" }}>
+                    <span className="font-semibold" style={{ color: "var(--accent-ink)" }}>✦ Why this post: </span>{why}
+                  </div>
+                ) : (
+                  <button type="button" onClick={explain} disabled={whyLoading} className="text-xs font-semibold disabled:opacity-60" style={{ color: "var(--accent-ink)" }}>
+                    {whyLoading ? "Thinking…" : "✦ Why this post?"}
+                  </button>
+                )}
                 {variants.length > 0 ? (
                   <details className="text-xs">
                     <summary className="cursor-pointer font-semibold" style={{ color: "var(--muted)" }}>Per-platform versions ({variants.length})</summary>
