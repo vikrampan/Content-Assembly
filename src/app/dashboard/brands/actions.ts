@@ -263,7 +263,7 @@ import { extractBrandBook, type BrandDraft, type SourceDoc } from "@/lib/ai/bran
 
 // Columns that make up a full brand-book snapshot (for history / restore).
 const BRAND_COLS =
-  "name,slug,primary_hex,secondary_hex,accent_hex,palette,headline_font,body_font,voice_tone,voice_never,photography_style,do_rules,never_rules,locations,logo_rules,logo_path,ai_style_suffix,brand_book,brand_status";
+  "name,slug,primary_hex,secondary_hex,accent_hex,palette,headline_font,body_font,voice_tone,voice_never,photography_style,do_rules,never_rules,locations,logo_rules,logo_path,ai_style_suffix,subject,brand_book,brand_status";
 
 async function snapshotBrand(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -395,7 +395,7 @@ export async function restoreBrandVersion(versionId: string): Promise<ActionResu
   const writable: (keyof Workspace)[] = [
     "primary_hex", "secondary_hex", "accent_hex", "palette", "headline_font", "body_font",
     "voice_tone", "voice_never", "photography_style", "do_rules", "never_rules", "locations",
-    "logo_rules", "logo_path", "ai_style_suffix", "brand_book",
+    "logo_rules", "logo_path", "ai_style_suffix", "subject", "brand_book",
   ];
   const patch: Record<string, unknown> = {};
   for (const k of writable) if (k in snap) patch[k] = snap[k];

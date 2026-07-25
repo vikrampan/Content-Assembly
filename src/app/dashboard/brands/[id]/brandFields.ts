@@ -11,6 +11,7 @@ export const CORE: Desc[] = [
   { path: "fields.accent_hex", label: "Accent colour", kind: "hex", hint: "A third highlight colour used sparingly." },
   { path: "fields.headline_font", label: "Headline font", hint: "The font used for big titles." },
   { path: "fields.body_font", label: "Body font", hint: "The font used for normal running text." },
+  { path: "fields.subject", label: "Brand subject", hint: "What the brand makes, as a short noun (e.g. 'the coffee', 'each salt crystal'). The strategy engine drops this into content directions. Defaults to 'the product'." },
   { path: "fields.voice_tone", label: "Voice & tone", kind: "area", hint: "How the brand sounds when it talks." },
   { path: "fields.voice_never", label: "Never say", kind: "area", hint: "Words or phrases the brand must never use." },
   { path: "fields.do_rules", label: "The brand posts", kind: "area", hint: "The kinds of things the brand does post." },

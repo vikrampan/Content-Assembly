@@ -28,6 +28,7 @@ export interface BrandDraftFields {
   locations?: string;
   logo_rules?: string;
   ai_style_suffix?: string;
+  subject?: string;
 }
 
 export interface BrandDraft {
@@ -68,6 +69,7 @@ const SYSTEM = [
     locations: "string",
     logo_rules: "string",
     ai_style_suffix: "one line of visual style keywords for image prompts",
+    subject: "a SHORT noun phrase for the hero thing the brand makes/sells, written to slot into 'a hero reel of ___ in extreme close-up' — e.g. 'the coffee', 'each salt crystal', 'the skincare', 'every sneaker'. Lowercase, no trailing punctuation.",
     identity: { tagline: "s", mission: "s", vision: "s", values: ["s"], positioning: "s", story: "s", audience: "s", competitors: "s" },
     voice: { attributes: ["s"], mechanics: "s", examples_good: ["s"], examples_bad: ["s"] },
     messaging: { value_props: ["s"], boilerplate: "s", elevator_pitch: "s", key_messages: ["s"] },
@@ -128,6 +130,7 @@ function mapDraft(raw: any, provider: "claude" | "stub", model?: string, usage?:
     locations: str(raw.locations),
     logo_rules: str(raw.logo_rules),
     ai_style_suffix: str(raw.ai_style_suffix),
+    subject: str(raw.subject),
   };
 
   const brand_book: BrandBook = {
