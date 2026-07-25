@@ -23,6 +23,33 @@ async function requireBrandEditor() {
   return session;
 }
 
+/**
+ * Who may WRITE a brand book. Staff (admin / brand designer) write through their
+ * own RLS-scoped client. Clients may edit THEIR OWN brand book directly — we
+ * verify membership, then write with the service-role client so RLS (which only
+ * lets staff mutate workspaces) doesn't block them. Same source of truth, so
+ * edits reflect everywhere.
+ */
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+async function requireBrandWrite(workspaceId: string): Promise<{ db: Db; userId: string }> {
+  const session = await requireSession();
+  const fn = userFunction(session.profile);
+  if (fn === "admin" || fn === "brand") {
+    return { db: await createClient(), userId: session.userId };
+  }
+  if (fn === "client") {
+    if (!hasServiceRole()) throw new Error("Server not configured for client edits (service role missing).");
+    const admin = createAdminClient();
+    const { data: mem } = await admin
+      .from("memberships").select("id")
+      .eq("workspace_id", workspaceId).eq("user_id", session.userId).eq("role", "client")
+      .maybeSingle();
+    if (mem) return { db: admin as unknown as Db, userId: session.userId };
+  }
+  throw new Error("Forbidden: you can't edit this brand book");
+}
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -125,7 +152,7 @@ const HEX_RE = /^[0-9a-fA-F]{6}$/;
 
 /** Lock / update a brand's Brand DNA (the constitution every desk reads). */
 export async function updateBrandBook(input: BrandBookInput): Promise<ActionResult> {
-  await requireBrandEditor();
+  const { db: supabase } = await requireBrandWrite(input.id);
 
   const name = input.name.trim();
   if (!name) return { error: "Brand name is required." };
@@ -145,7 +172,6 @@ export async function updateBrandBook(input: BrandBookInput): Promise<ActionResu
   if (primary.bad) return { error: `Primary hex "${primary.v}" is not a 6-digit hex code.` };
   if (secondary.bad) return { error: `Secondary hex "${secondary.v}" is not a 6-digit hex code.` };
 
-  const supabase = await createClient();
   const { error } = await supabase
     .from("workspaces")
     .update({
@@ -172,6 +198,7 @@ export async function updateBrandBook(input: BrandBookInput): Promise<ActionResu
   }
   revalidatePath("/dashboard/brands");
   revalidatePath(`/dashboard/brands/${input.id}`);
+  revalidatePath("/dashboard/brand-book");
   return { ok: true };
 }
 
@@ -259,7 +286,7 @@ export async function deleteBrandAsset(assetId: string): Promise<ActionResult> {
 // Brand Designer — AI Import + structured book + lock/versioning (0015).
 // ===========================================================================
 import type { BrandBook, BrandBookVersion, Workspace } from "@/lib/types";
-import { extractBrandBook, type BrandDraft, type SourceDoc } from "@/lib/ai/brandExtract";
+import { extractBrandBook, deriveSubject, type BrandDraft, type SourceDoc } from "@/lib/ai/brandExtract";
 
 // Columns that make up a full brand-book snapshot (for history / restore).
 const BRAND_COLS =
@@ -348,14 +375,36 @@ export async function applyBrandImport(
   return { ok: true };
 }
 
+/** Suggest a brand `subject` noun from the existing brand book (AI, no save). */
+export async function suggestBrandSubject(workspaceId: string): Promise<{ subject: string } | { error: string }> {
+  const { db } = await requireBrandWrite(workspaceId);
+  const { data: ws } = await db
+    .from("workspaces")
+    .select("name, brand_book, do_rules, photography_style")
+    .eq("id", workspaceId)
+    .maybeSingle<{ name: string; brand_book: BrandBook | null; do_rules: string | null; photography_style: string | null }>();
+  if (!ws) return { error: "Brand not found." };
+  const bb = ws.brand_book ?? {};
+  const parts = [
+    ws.name && `Brand: ${ws.name}`,
+    bb.identity?.positioning, bb.identity?.story, bb.identity?.mission,
+    bb.messaging?.boilerplate, bb.messaging?.elevator_pitch,
+    ws.do_rules, ws.photography_style,
+  ].filter(Boolean) as string[];
+  if (parts.length === 0) return { error: "Add a bit more to the brand book first, then try again." };
+  const subject = await deriveSubject(parts.join("\n"));
+  if (!subject) return { error: "Couldn't suggest one — check ANTHROPIC_API_KEY, or type it manually." };
+  return { subject };
+}
+
 /** Save an edited structured brand-book section (manual mode). */
 export async function saveBrandBook(workspaceId: string, brand_book: BrandBook): Promise<ActionResult> {
-  const session = await requireBrandEditor();
-  const supabase = await createClient();
-  await snapshotBrand(supabase, workspaceId, session.userId, "Manual edit", "manual");
+  const { db: supabase, userId } = await requireBrandWrite(workspaceId);
+  await snapshotBrand(supabase, workspaceId, userId, "Manual edit", "manual");
   const { error } = await supabase.from("workspaces").update({ brand_book }).eq("id", workspaceId);
   if (error) return { error: error.message };
   revalidatePath(`/dashboard/brands/${workspaceId}`);
+  revalidatePath("/dashboard/brand-book");
   return { ok: true };
 }
 

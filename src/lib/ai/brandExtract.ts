@@ -174,6 +174,32 @@ function mapDraft(raw: any, provider: "claude" | "stub", model?: string, usage?:
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+/**
+ * One-shot: given a brand's existing description, return a short subject noun
+ * ("the coffee", "each salt crystal") for the format engine. Used by the
+ * "Suggest" button so brands imported before the field can fill it in one click.
+ */
+export async function deriveSubject(brandText: string): Promise<string | null> {
+  if (!hasAnthropic() || !brandText.trim()) return null;
+  try {
+    const client = new Anthropic();
+    const msg = await client.messages.create({
+      model: "claude-opus-4-8",
+      max_tokens: 60,
+      system:
+        "Given a brand's description, reply with ONLY a short lowercase noun phrase for the hero thing the brand makes or sells, phrased to slot into 'a hero reel of ___ in extreme close-up' — e.g. 'the coffee', 'each salt crystal', 'the skincare', 'every sneaker'. No punctuation, no quotes, no explanation.",
+      messages: [{ role: "user", content: brandText.slice(0, 4000) }],
+    });
+    const text = msg.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text).join("").trim().toLowerCase()
+      .replace(/^["'\s]+|["'.\s]+$/g, "");
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function extractBrandBook(docs: SourceDoc[]): Promise<BrandDraft> {
   if (!hasAnthropic() || docs.length === 0) return emptyDraft();
   try {

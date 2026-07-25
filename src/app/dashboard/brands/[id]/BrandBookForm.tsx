@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import type { Workspace } from "@/lib/types";
 import { InfoDot } from "@/components/InfoDot";
-import { updateBrandBook } from "../actions";
+import { updateBrandBook, suggestBrandSubject } from "../actions";
 
 const inputCls = "w-full rounded-lg px-3 py-2 text-sm outline-none";
 const inputStyle = { background: "var(--panel-2)", border: "1px solid var(--line-2)", color: "var(--ink)" } as const;
@@ -59,6 +59,16 @@ export function BrandBookForm({ brand }: { brand: Workspace }) {
   });
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [suggesting, startSuggest] = useTransition();
+
+  function suggestSubject() {
+    setFeedback(null);
+    startSuggest(async () => {
+      const res = await suggestBrandSubject(brand.id);
+      if ("subject" in res) setV((cur) => ({ ...cur, subject: res.subject }));
+      else setFeedback({ kind: "err", text: res.error });
+    });
+  }
 
   const set = (f: Field) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setV((cur) => ({ ...cur, [f]: e.target.value }));
@@ -98,7 +108,15 @@ export function BrandBookForm({ brand }: { brand: Workspace }) {
           </label>
           {Text("headline_font", "Headline font", "The font used for big titles and headlines.", "Editorial serif")}
           {Text("body_font", "Body font", "The font used for normal running text.", "Clean modern sans-serif")}
-          {Text("subject", "Brand subject", "What the brand makes, as a short noun — the strategy engine drops this into content directions so they read on-brand (e.g. 'the coffee', 'each piece', 'the skincare'). Defaults to 'the product'.", "the product")}
+          <label className="block text-xs sm:col-span-2">
+            <Lbl label="Brand subject" hint="What the brand makes, as a short noun — the strategy engine drops this into content directions so they read on-brand (e.g. 'the coffee', 'each salt crystal', 'the skincare'). Defaults to 'the product'." />
+            <div className="flex gap-2">
+              <input className={inputCls} style={inputStyle} value={v.subject} onChange={set("subject")} placeholder="the product" />
+              <button type="button" onClick={suggestSubject} disabled={suggesting} className="shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition hover:brightness-95 disabled:opacity-50" style={{ border: "1px solid var(--line-2)", color: "var(--accent-ink)" }}>
+                {suggesting ? "Thinking…" : "✦ Suggest"}
+              </button>
+            </div>
+          </label>
         </div>
       </section>
 
