@@ -44,6 +44,7 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
   const [collF, setCollF] = useState("all");
   const [uploadColl, setUploadColl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<AssetView | null>(null);
@@ -144,36 +145,63 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
         <ShotLists workspaceId={workspaceId} briefs={briefs} />
       ) : (
         <>
-          {/* filters + upload */}
-          <div className="flex flex-wrap items-center gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, tag, collection…" className="rounded-lg px-3 py-2 text-sm outline-none" style={{ ...inputStyle, minWidth: 200 }} />
-            <select value={kindF} onChange={(e) => setKindF(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm outline-none" style={inputStyle}>
-              <option value="all">All types</option><option value="image">Images</option><option value="video">Video</option><option value="audio">Audio</option><option value="generated">AI generated</option>
-            </select>
-            <select value={selF} onChange={(e) => setSelF(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm outline-none" style={inputStyle}>
-              <option value="all">All</option><option value="pick">Picks ✓</option><option value="reject">Rejects</option><option value="rated">Rated</option>
-            </select>
-            {collections.length > 0 ? (
-              <select value={collF} onChange={(e) => setCollF(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm outline-none" style={inputStyle}>
-                <option value="all">All collections</option>
-                {collections.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            ) : null}
-            <div className="ml-auto flex items-center gap-2">
-              <input value={uploadColl} onChange={(e) => setUploadColl(e.target.value)} placeholder="Collection…" className="rounded-lg px-2.5 py-2 text-sm outline-none" style={{ ...inputStyle, width: 130 }} />
-              <input ref={fileRef} type="file" multiple className="hidden" accept="image/*,video/*,audio/*" onChange={(e) => onFiles(e.target.files)} />
-              <button type="button" onClick={() => fileRef.current?.click()} disabled={busy || !workspaceId} className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--accent)" }}>
-                {busy ? "Uploading…" : "Upload"}
-              </button>
-            </div>
+          <input ref={fileRef} type="file" multiple className="hidden" accept="image/*,video/*,audio/*" onChange={(e) => onFiles(e.target.files)} />
+
+          {/* Prominent drag-and-drop upload zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); onFiles(e.dataTransfer.files); }}
+            onClick={() => !busy && fileRef.current?.click()}
+            className="flex flex-col items-center justify-center gap-2 rounded-2xl px-6 py-8 text-center transition"
+            style={{ border: `2px dashed ${dragOver ? "var(--accent)" : "var(--line-2)"}`, background: dragOver ? "var(--accent-soft)" : "var(--panel)", cursor: busy ? "default" : "pointer" }}
+          >
+            {busy ? (
+              <>
+                <span className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" style={{ color: "var(--accent)" }} />
+                <span className="text-sm font-medium" style={{ color: "var(--muted)" }}>Uploading…</span>
+              </>
+            ) : (
+              <>
+                <span className="grid h-11 w-11 place-items-center rounded-xl text-xl text-white" style={{ background: "var(--accent)" }}>↑</span>
+                <span className="text-sm font-semibold">Drag photos, video &amp; audio here</span>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>or click to browse · stored privately per brand</span>
+                <div className="mt-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[11px]" style={{ color: "var(--faint)" }}>Add to collection:</span>
+                  <input value={uploadColl} onChange={(e) => setUploadColl(e.target.value)} placeholder="optional, e.g. Oct shoot" className="rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ ...inputStyle, width: 160 }} />
+                </div>
+              </>
+            )}
           </div>
 
           {error ? <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(192,85,63,.12)", color: "var(--danger)" }}>{error}</div> : null}
 
-          {filtered.length === 0 ? (
-            <div className="rounded-2xl p-10 text-center text-sm" style={{ border: "1px dashed var(--line-2)", color: "var(--muted)" }}>
-              {mine.length === 0 ? "No media for this brand yet — upload the shoot or generate with AI." : "Nothing matches these filters."}
+          {/* Filters — only when there's media to filter */}
+          {mine.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, tag, collection…" className="rounded-lg px-3 py-2 text-sm outline-none" style={{ ...inputStyle, minWidth: 200 }} />
+              <select value={kindF} onChange={(e) => setKindF(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm outline-none" style={inputStyle}>
+                <option value="all">All types</option><option value="image">Images</option><option value="video">Video</option><option value="audio">Audio</option><option value="generated">AI generated</option>
+              </select>
+              <select value={selF} onChange={(e) => setSelF(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm outline-none" style={inputStyle}>
+                <option value="all">All</option><option value="pick">Picks ✓</option><option value="reject">Rejects</option><option value="rated">Rated</option>
+              </select>
+              {collections.length > 0 ? (
+                <select value={collF} onChange={(e) => setCollF(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm outline-none" style={inputStyle}>
+                  <option value="all">All collections</option>
+                  {collections.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              ) : null}
+              <span className="ml-auto text-xs" style={{ color: "var(--faint)" }}>{filtered.length} of {mine.length}</span>
             </div>
+          ) : null}
+
+          {mine.length === 0 ? (
+            <div className="rounded-2xl p-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+              No media yet. Drop a shoot above, or try <button type="button" onClick={() => setTab("generate")} className="font-semibold underline" style={{ color: "var(--accent-ink)" }}>✦ Generate (AI)</button>.
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl p-8 text-center text-sm" style={{ border: "1px dashed var(--line-2)", color: "var(--muted)" }}>Nothing matches these filters.</div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {filtered.map((a) => (

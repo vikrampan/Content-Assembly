@@ -117,6 +117,20 @@ body {
   background: var(--accent-soft);
 }
 
+/* Tailwind's reset drops the pointer cursor on buttons — restore it everywhere. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+select,
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  cursor: pointer;
+}
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Thin scrollbars for the horizontal Kanban lanes. */
 .lane-scroll {
   scrollbar-width: thin;

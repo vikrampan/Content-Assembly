@@ -9,11 +9,13 @@
 
 import { createAdminClient, hasServiceRole } from "@/lib/supabase/admin";
 
+// Accept RESEND_API_KEY (canonical) or RESEND_API (as set in Vercel).
+const RESEND_KEY = process.env.RESEND_API_KEY || process.env.RESEND_API;
 const FROM = process.env.RESEND_FROM || "Mendly OS <onboarding@resend.dev>";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://content-assembly.vercel.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.mendlylabs.tech";
 
 export function hasResend(): boolean {
-  return Boolean(process.env.RESEND_API_KEY);
+  return Boolean(RESEND_KEY);
 }
 
 interface Mail {
@@ -48,7 +50,7 @@ async function send(mail: Mail): Promise<void> {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${RESEND_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
