@@ -86,56 +86,83 @@ export default async function ContentDetailPage({
     }),
   );
 
-  return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <Link href="/dashboard" className="text-xs hover:underline" style={{ color: "var(--muted)" }}>← Board</Link>
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          <h1 className="text-lg font-semibold">{item.title}</h1>
-          <span className="pill pending">{STAGE_LABEL[item.stage] ?? item.stage}</span>
-          <span className="text-xs uppercase tracking-wide" style={{ color: "var(--faint)" }}>{item.format}</span>
-        </div>
-        {ws ? <p className="text-sm" style={{ color: "var(--muted)" }}>{ws.name}</p> : null}
-      </div>
+  // -----------------------------------------------------------------------
+  // Desk-aware panels — every desk opens the same route, but each sees only
+  // the surfaces it actually acts on. Reference (brief + brand voice) and the
+  // ownership/pipeline hand-off are shared; the working tools are per-desk.
+  // -----------------------------------------------------------------------
+  const fn = session.fn;
+  const all = fn === "admin";
+  const production = ["design", "video", "image", "audio"].includes(fn);
+  const V = {
+    conversation: all || fn === "social" || fn === "qa",
+    ownership: true,
+    pipeline: true,
+    brief: true,
+    brandref: true,
+    copy: all || fn === "content" || fn === "strategy" || fn === "qa",
+    studio: all || fn === "content",
+    deliverables: all || production || fn === "qa" || fn === "social",
+    qa: all || fn === "qa",
+    scheduler: all || fn === "social",
+  };
+  const hasMain = V.conversation || V.copy || V.studio || V.deliverables || V.qa || V.scheduler;
 
-      {/* Two-way client conversation (surfaced from the portal). */}
-      <SuggestionThread contentId={item.id} messages={suggestions.map((c) => ({ id: c.id, body: c.body, mine: c.author_id === meId }))} />
-
-      {/* Pipeline routing / hand-off. */}
-      <AssignPanel contentId={item.id} stage={item.stage} note={item.assignment_note} fn={session.fn} />
-
-      {/* Ownership — assignee + due date. */}
-      <OwnershipPanel contentId={item.id} assignedTo={item.assigned_to} dueDate={item.due_date} staff={staff} />
-
-      {/* The brief that travels with the asset (Stage 04). */}
-      <section className="card grid gap-4 p-4 sm:grid-cols-2">
+  const brief = (
+    <section className="card p-4">
+      <div className="mb-3 text-sm font-semibold">The brief</div>
+      <div className="space-y-3">
         <Field label="Objective" value={item.objective ? (OBJECTIVE_LABELS[item.objective as Objective] ?? item.objective) : null} />
         <Field label="Chosen format" value={item.format_type} />
         <Field label="Content pillar" value={pillarRow?.name ?? null} />
         <Field label="Campaign" value={item.campaign} />
         {item.format_rationale ? (
-          <div className="sm:col-span-2">
+          <div>
             <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Why this format</div>
-            <div className="mt-0.5 text-xs" style={{ color: "var(--muted)" }}>{item.format_rationale}</div>
+            <div className="mt-0.5 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>{item.format_rationale}</div>
           </div>
         ) : null}
-      </section>
+      </div>
+    </section>
+  );
 
-      {/* The three-tier copy (Stage 05) — editable + AI regenerate + history. */}
-      <ContentEditor item={item} versions={versions} />
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      {/* Header */}
+      <div>
+        <Link href="/dashboard" className="text-xs hover:underline" style={{ color: "var(--muted)" }}>← Board</Link>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-bold" style={{ letterSpacing: "-.01em" }}>{item.title}</h1>
+          <span className="pill pending">{STAGE_LABEL[item.stage] ?? item.stage}</span>
+          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>{item.format}</span>
+        </div>
+        {ws ? <p className="mt-0.5 text-sm" style={{ color: "var(--muted)" }}>{ws.name}</p> : null}
+      </div>
 
-      {/* The Content desk's copy engineering — hooks, triggers, voice, variants. */}
-      <CopyStudio item={item} variants={variants} />
+      {/* Ownership — task metadata sits up top. */}
+      {V.ownership ? <OwnershipPanel contentId={item.id} assignedTo={item.assigned_to} dueDate={item.due_date} staff={staff} /> : null}
 
-      {/* Creative deliverables — the design/video/image/audio desks' output. */}
-      <Deliverables contentId={item.id} workspaceId={item.workspace_id} items={deliverables} />
+      {/* Work (left) + reference rail (right, sticky). */}
+      <div className={hasMain ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]" : ""}>
+        {hasMain ? (
+          <div className="min-w-0 space-y-5">
+            {V.conversation ? <SuggestionThread contentId={item.id} messages={suggestions.map((c) => ({ id: c.id, body: c.body, mine: c.author_id === meId }))} /> : null}
+            {V.copy ? <ContentEditor item={item} versions={versions} /> : null}
+            {V.studio ? <CopyStudio item={item} variants={variants} /> : null}
+            {V.deliverables ? <Deliverables contentId={item.id} workspaceId={item.workspace_id} items={deliverables} /> : null}
+            {V.qa ? <QaFirewall contentId={item.id} stage={item.stage} initial={item.qa_checklist} initialNotes={item.qa_notes} checklist={checklist} brandFirewall={brandGroups.length > 0} /> : null}
+            {V.scheduler ? <Scheduler contentId={item.id} stage={item.stage} variants={variants} scheduled={(scheduledRows as ScheduledPost[]) ?? []} /> : null}
+          </div>
+        ) : null}
 
-      {/* Brand reference + the firewall (Stage 06) — the gate to the client. */}
-      {ws ? <BrandRef ws={ws} /> : null}
-      <QaFirewall contentId={item.id} stage={item.stage} initial={item.qa_checklist} initialNotes={item.qa_notes} checklist={checklist} brandFirewall={brandGroups.length > 0} />
+        <aside className="space-y-5 lg:sticky lg:top-20 lg:self-start">
+          {V.brief ? brief : null}
+          {V.brandref && ws ? <BrandRef ws={ws} /> : null}
+        </aside>
+      </div>
 
-      {/* Social scheduling (Stage 07). */}
-      <Scheduler contentId={item.id} stage={item.stage} variants={variants} scheduled={(scheduledRows as ScheduledPost[]) ?? []} />
+      {/* Pipeline hand-off — the final action: ship it to the next desk. */}
+      {V.pipeline ? <AssignPanel contentId={item.id} stage={item.stage} note={item.assignment_note} fn={session.fn} /> : null}
     </div>
   );
 }
