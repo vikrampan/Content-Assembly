@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient, hasServiceRole } from "@/lib/supabase/admin";
 import { userFunction } from "@/lib/mendly/access";
+import { sendCredentialsEmail } from "@/lib/email/resend";
 
 export type ActionResult = { ok: true; id?: string } | { error: string };
 
@@ -94,6 +95,9 @@ export async function createBrand(input: {
     await admin.from("workspaces").delete().eq("id", ws!.id);
     return { error: `Membership failed: ${memErr.message}` };
   }
+
+  // Email the new client their portal credentials.
+  await sendCredentialsEmail({ to: ownerEmail, name: input.ownerName.trim() || ownerEmail, brandName: name, password: input.ownerPassword, role: "Owner" });
 
   revalidatePath("/dashboard/brands");
   return { ok: true, id: ws!.id };
@@ -435,6 +439,11 @@ export async function addClientMember(workspaceId: string, input: { email: strin
   await admin.from("profiles").update({ account_type: "client", full_name: input.name.trim() || email }).eq("id", uid);
   const { error: memErr } = await admin.from("memberships").insert({ workspace_id: workspaceId, user_id: uid, role: "client", client_role: input.role });
   if (memErr) { await admin.auth.admin.deleteUser(uid); return { error: memErr.message }; }
+
+  // Email the new member their portal credentials.
+  const { data: ws } = await admin.from("workspaces").select("name").eq("id", workspaceId).single<{ name: string }>();
+  await sendCredentialsEmail({ to: email, name: input.name.trim() || email, brandName: ws?.name ?? "your brand", password: input.password, role: input.role === "owner" ? "Owner" : "Reviewer" });
+
   revalidatePath(`/dashboard/brands/${workspaceId}`);
   return { ok: true };
 }

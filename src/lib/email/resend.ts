@@ -23,21 +23,33 @@ interface Mail {
   subject: string;
   heading: string;
   body: string;
+  details?: { label: string; value: string }[];
   cta?: { label: string; href: string };
+  footnote?: string;
 }
 
-function render({ heading, body, cta }: Mail): string {
+function render({ heading, body, details, cta, footnote }: Mail): string {
+  const detailRows = details?.length
+    ? `<table style="width:100%;border-collapse:collapse;background:#f4efe7;border:1px solid #e5dbcc;border-radius:12px;margin:0 0 22px">
+        ${details.map((d) => `<tr>
+          <td style="padding:11px 16px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#9a8c7b;font-weight:700;white-space:nowrap;vertical-align:top">${d.label}</td>
+          <td style="padding:11px 16px;font-size:14px;color:#241c15;font-family:ui-monospace,Menlo,monospace;word-break:break-all">${d.value}</td>
+        </tr>`).join("")}
+      </table>`
+    : "";
   return `<!doctype html><html><body style="margin:0;background:#f1ede6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:32px">
-  <div style="max-width:520px;margin:0 auto;background:#fbf9f5;border:1px solid #e5dbcc;border-radius:16px;overflow:hidden">
+  <div style="max-width:540px;margin:0 auto;background:#fbf9f5;border:1px solid #e5dbcc;border-radius:16px;overflow:hidden">
     <div style="height:6px;background:#c8853f"></div>
-    <div style="padding:28px 30px">
+    <div style="padding:30px 32px">
       <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#9a8c7b;font-weight:700">Mendly OS</div>
-      <h1 style="font-family:Georgia,serif;font-size:22px;margin:8px 0 12px;color:#241c15">${heading}</h1>
+      <h1 style="font-family:Georgia,serif;font-size:23px;margin:8px 0 14px;color:#241c15;line-height:1.25">${heading}</h1>
       <p style="font-size:15px;line-height:1.6;color:#6e6154;margin:0 0 22px">${body}</p>
-      ${cta ? `<a href="${cta.href}" style="display:inline-block;background:#c8853f;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:10px">${cta.label}</a>` : ""}
+      ${detailRows}
+      ${cta ? `<a href="${cta.href}" style="display:inline-block;background:#c8853f;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:10px">${cta.label}</a>` : ""}
+      ${footnote ? `<p style="font-size:12px;line-height:1.5;color:#9a8c7b;margin:22px 0 0">${footnote}</p>` : ""}
     </div>
   </div>
-  <p style="text-align:center;color:#9a8c7b;font-size:11px;margin-top:18px">Sent by Mendly OS</p>
+  <p style="text-align:center;color:#9a8c7b;font-size:11px;margin-top:18px">Sent by Mendly OS · your content, delivered</p>
 </body></html>`;
 }
 
@@ -86,6 +98,38 @@ async function clientEmailForWorkspace(workspaceId: string): Promise<string | nu
     console.error("[email] client lookup failed:", e);
     return null;
   }
+}
+
+/**
+ * Send a new client their login credentials — sent when an admin creates a
+ * brand (owner login) or adds a client team member. Professional welcome.
+ */
+export async function sendCredentialsEmail(input: {
+  to: string;
+  name: string;
+  brandName: string;
+  password: string;
+  role?: string;
+}): Promise<void> {
+  await send({
+    to: input.to,
+    subject: `Your ${input.brandName} content portal is ready`,
+    heading: `Welcome to ${input.brandName}`,
+    body: `Your content team has set up your brand portal, where you'll review the monthly plan, approve posts, message the team, and see your performance — all in one place. Here are your sign-in details:`,
+    details: [
+      { label: "Portal", value: `${APP_URL}/login` },
+      { label: "Email", value: input.to },
+      { label: "Password", value: input.password },
+      ...(input.role ? [{ label: "Role", value: input.role }] : []),
+    ],
+    cta: { label: "Sign in to your portal", href: `${APP_URL}/login` },
+    footnote: "Please keep these details private. For your security, we recommend signing in and confirming everything looks right. If you didn't expect this, contact your account manager.",
+  });
+}
+
+/** Generic client-facing notification email (review ready, calendar, replies…). */
+export async function sendClientEmail(to: string, subject: string, heading: string, body: string, href: string): Promise<void> {
+  await send({ to, subject, heading, body, cta: { label: "Open your portal", href: `${APP_URL}${href}` } });
 }
 
 /** Notify the client that a post is ready for their sign-off. */

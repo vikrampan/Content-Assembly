@@ -5,6 +5,7 @@
 // ===========================================================================
 
 import { createAdminClient, hasServiceRole } from "@/lib/supabase/admin";
+import { sendClientEmail } from "@/lib/email/resend";
 
 interface Payload { workspaceId?: string | null; type: string; title: string; body?: string; link?: string }
 
@@ -36,13 +37,21 @@ export async function notifyDepartments(departments: string[], p: Payload) {
   }
 }
 
-/** Notify the client owner of a workspace. */
+/** Notify every client member of a workspace — in-app AND by email. */
 export async function notifyClientOf(workspaceId: string, p: Payload) {
   if (!hasServiceRole()) return;
   try {
     const admin = createAdminClient();
     const { data } = await admin.from("memberships").select("user_id").eq("workspace_id", workspaceId).eq("role", "client");
-    await insert(((data as { user_id: string }[]) ?? []).map((r) => r.user_id), { ...p, workspaceId });
+    const userIds = ((data as { user_id: string }[]) ?? []).map((r) => r.user_id);
+    await insert(userIds, { ...p, workspaceId });
+
+    // Also email each client member so they hear about it off-platform.
+    for (const uid of userIds) {
+      const { data: u } = await admin.auth.admin.getUserById(uid);
+      const email = u.user?.email;
+      if (email) await sendClientEmail(email, p.title, p.title, p.body ?? p.title, p.link ?? "/dashboard");
+    }
   } catch (e) {
     console.error("[notify] client lookup failed:", e);
   }

@@ -155,6 +155,7 @@ export async function runStrategyDesk(input: {
 // ===========================================================================
 import type { ContentPillar } from "@/lib/types";
 import { planMonth, type PlannedPost } from "@/lib/ai/planner";
+import { notifyClientOf } from "@/lib/notify";
 
 async function requireStrategist() {
   const session = await requireSession();
@@ -250,6 +251,16 @@ export async function commitMonthPlan(input: {
 
   const { error } = await supabase.from("content_items").insert(rows);
   if (error) return { error: error.message };
+
+  // Let the client know their monthly calendar is ready to review.
+  const monthName = new Date(input.year, input.month, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+  await notifyClientOf(input.workspaceId, {
+    type: "calendar",
+    title: `Your ${monthName} content plan is ready`,
+    body: `Your team has drafted ${rows.length} post${rows.length === 1 ? "" : "s"} for ${monthName}. Open your portal to review the calendar and share any feedback.`,
+    link: "/dashboard/calendar",
+  });
+
   revalidatePath("/dashboard/calendar");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/strategy");
