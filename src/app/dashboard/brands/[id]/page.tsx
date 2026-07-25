@@ -4,13 +4,9 @@ import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient, hasServiceRole } from "@/lib/supabase/admin";
 import type { Asset, BrandBookVersion, Workspace } from "@/lib/types";
-import { BrandBookForm } from "./BrandBookForm";
-import { ClientTeamCard, type ClientMember } from "./ClientTeamCard";
-import { BrandKit, type BrandAssetView } from "./BrandKit";
-import { BrandImport } from "./BrandImport";
-import { BrandBookSections } from "./BrandBookSections";
-import { BrandLockBar } from "./BrandLockBar";
-import { BrandHistory } from "./BrandHistory";
+import { type ClientMember } from "./ClientTeamCard";
+import { type BrandAssetView } from "./BrandKit";
+import { BrandDeskShell } from "./BrandDeskShell";
 
 const IMG = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
 const basename = (p: string) => (p.split("/").pop() ?? p).replace(/^[0-9a-f-]{36}-/i, "");
@@ -72,25 +68,39 @@ export default async function BrandEditorPage({
 
   const score = coreScore(data);
 
+  // Primary logo + injectable @font-face for the live preview.
+  const logoUrl = kit.find((a) => a.isPrimaryLogo)?.url ?? kit.find((a) => a.kind === "logo")?.url ?? null;
+  const fontAssets = kit.filter((a) => a.kind === "font" && a.url);
+  const fmt = (name: string) => (/\.woff2$/i.test(name) ? "woff2" : /\.woff$/i.test(name) ? "woff" : /\.otf$/i.test(name) ? "opentype" : "truetype");
+  const fontFaces: string[] = [];
+  if (fontAssets[0] && data.headline_font) fontFaces.push(`@font-face{font-family:"${data.headline_font}";src:url("${fontAssets[0].url}") format("${fmt(fontAssets[0].name)}");font-display:swap}`);
+  if (fontAssets[1] && data.body_font) fontFaces.push(`@font-face{font-family:"${data.body_font}";src:url("${fontAssets[1].url}") format("${fmt(fontAssets[1].name)}");font-display:swap}`);
+
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="mx-auto max-w-4xl space-y-5">
       <div>
         <Link href="/dashboard/brands" className="text-xs hover:underline" style={{ color: "var(--muted)" }}>
           ← Brand Books
         </Link>
-        <h1 className="mt-1 text-lg font-semibold">{data.name} — Brand Book</h1>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <h1 className="text-lg font-semibold">{data.name} — Brand Book</h1>
+          <span className={`pill ${data.brand_status === "locked" ? "approved" : "pending"}`}>{data.brand_status === "locked" ? "Locked" : "Draft"}</span>
+        </div>
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          The constitution. Locked here, obeyed everywhere — copy desk, AI prompts, and the QA firewall.
+          The constitution — the identity every desk and every AI prompt builds from.
         </p>
       </div>
 
-      <BrandLockBar workspaceId={id} status={data.brand_status} lockedAt={data.locked_at} filled={score.filled} total={score.total} />
-      {session.fn === "admin" ? <ClientTeamCard workspaceId={id} members={clientMembers} /> : null}
-      <BrandImport workspaceId={id} />
-      <BrandKit brand={data} assets={kit} />
-      <BrandBookForm brand={data} />
-      <BrandBookSections workspaceId={id} initial={data.brand_book ?? {}} />
-      <BrandHistory versions={versions} />
+      <BrandDeskShell
+        brand={data}
+        kit={kit}
+        versions={versions}
+        clientMembers={clientMembers}
+        isAdmin={session.fn === "admin"}
+        score={score}
+        fontFaces={fontFaces}
+        logoUrl={logoUrl}
+      />
     </div>
   );
 }
