@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ToastProvider } from "@/components/ui/Toast";
+import { NetworkBanner } from "@/components/ui/Network";
 
 export const metadata: Metadata = {
   title: "Content Assembly Line",
@@ -14,7 +16,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <ToastProvider>
+          <NetworkBanner />
+          {children}
+        </ToastProvider>
+      </body>
     </html>
   );
 }

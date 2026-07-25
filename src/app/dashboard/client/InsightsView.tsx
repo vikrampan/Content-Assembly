@@ -1,6 +1,7 @@
 import type { ContentItem, PostMetric } from "@/lib/types";
 import { ClientAnalytics } from "../ClientAnalytics";
 import { AiCard } from "./AiCard";
+import { EmptyState } from "@/components/ui/States";
 import { accentOf, brandFonts, BrandStyle, clientWorkspace, SectionHeader } from "./shared";
 
 const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
@@ -81,7 +82,7 @@ export async function InsightsView() {
           </div>
         </section>
       ) : (
-        <div className="card p-8 text-center text-sm" style={{ color: "var(--muted)" }}>Post analytics appear here once your posts go live.</div>
+        <EmptyState icon="📊" title="No analytics yet" description="Your reach, engagement, and saves appear here as soon as your posts go live." />
       )}
     </div>
   );

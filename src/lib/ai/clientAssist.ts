@@ -15,7 +15,9 @@ import { hasAnthropic } from "@/lib/ai/strategist";
 import { estimateCost, monthStartISO } from "@/lib/ai/usage";
 import type { createClient } from "@/lib/supabase/server";
 
-const MODEL = "claude-opus-4-8";
+// Client-facing AI runs on Haiku — fast and ~5× cheaper than Opus, plenty for
+// summaries, explanations, and chat. (Staff/strategy desks stay on Opus.)
+const MODEL = "claude-haiku-4-5";
 /** Strict default monthly token cap for a client with no explicit budget row. */
 export const DEFAULT_CLIENT_MONTHLY_TOKENS = 150_000;
 

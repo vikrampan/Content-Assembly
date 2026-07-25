@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { aiConcierge } from "../aiClient";
+import { useOnline } from "@/components/ui/Network";
 
 interface Msg { role: "user" | "assistant"; text: string }
 
@@ -17,18 +18,28 @@ export function Concierge({ brandName }: { brandName: string }) {
   const [input, setInput] = useState("");
   const [pending, start] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
+  const online = useOnline();
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, pending]);
 
   function send(text: string) {
     const q = text.trim();
     if (!q || pending) return;
+    if (!online) {
+      setMsgs((m) => [...m, { role: "user", text: q }, { role: "assistant", text: "📡 You're offline right now — reconnect and I'll pick right back up." }]);
+      setInput("");
+      return;
+    }
     const history = msgs.slice();
     setMsgs((m) => [...m, { role: "user", text: q }]);
     setInput("");
     start(async () => {
-      const res = await aiConcierge(q, history);
-      setMsgs((m) => [...m, { role: "assistant", text: res.text ?? res.error ?? "Sorry, I couldn't answer that." }]);
+      try {
+        const res = await aiConcierge(q, history);
+        setMsgs((m) => [...m, { role: "assistant", text: res.text ?? res.error ?? "Sorry, I couldn't answer that." }]);
+      } catch {
+        setMsgs((m) => [...m, { role: "assistant", text: "Something went wrong reaching the assistant. Please try again in a moment." }]);
+      }
     });
   }
 
