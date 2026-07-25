@@ -55,6 +55,22 @@ export function MonthPlanner({ workspaceId, pillars }: { workspaceId: string; pi
     setYear(d.getFullYear()); setMonth(d.getMonth());
   }
 
+  function blankRow(): Row {
+    return { day: 1, title: "", objective: OBJS[0], medium: "post", pillar: pillarNames[0] ?? null, hook: "", rationale: "" };
+  }
+
+  function startManual() {
+    setMsg(null); setRows([blankRow()]); setPhase("review");
+  }
+
+  function addRow() {
+    setRows((r) => {
+      const next = r ? [...r] : [];
+      const lastDay = next.length ? next[next.length - 1].day : 0;
+      return [...next, { ...blankRow(), day: Math.min(lastDay + 2, 28) }];
+    });
+  }
+
   function generate() {
     setMsg(null); setPhase("generating"); setRows(null);
     start(async () => {
@@ -109,9 +125,12 @@ export function MonthPlanner({ workspaceId, pillars }: { workspaceId: string; pi
           <button type="button" onClick={generate} disabled={phase === "generating" || phase === "committing"} className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--accent)" }}>
             {phase === "generating" ? "Planning the month…" : "✦ Draft the month"}
           </button>
+          <button type="button" onClick={startManual} disabled={phase === "generating" || phase === "committing"} className="rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:brightness-95 disabled:opacity-50" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>
+            + Build manually
+          </button>
         </div>
         <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
-          Grounded in the locked brand book{pillarNames.length ? `, your ${pillarNames.length} pillars,` : ""} and the real cultural moments for the brand&apos;s locations.
+          <b>Draft the month</b> uses AI, grounded in the locked brand book{pillarNames.length ? `, your ${pillarNames.length} pillars,` : ""} and real cultural moments. <b>Build manually</b> starts an empty calendar you fill in yourself.
         </p>
       </div>
 
@@ -156,6 +175,9 @@ export function MonthPlanner({ workspaceId, pillars }: { workspaceId: string; pi
                   <button type="button" onClick={() => removeRow(i)} style={{ color: "var(--faint)" }}>×</button>
                 </div>
               ))}
+              <button type="button" onClick={addRow} className="mt-1 w-full rounded-lg border border-dashed px-2 py-2 text-xs font-semibold transition hover:brightness-95" style={{ borderColor: "var(--line-2)", color: "var(--accent-ink)" }}>
+                + Add post
+              </button>
             </div>
           </div>
 
