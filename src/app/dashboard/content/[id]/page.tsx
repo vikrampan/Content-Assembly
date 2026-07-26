@@ -116,6 +116,9 @@ export default async function ContentDetailPage({
   const formatType = decision?.formatType ?? item.format_type;
   const formatWhy = decision?.rationale ?? item.format_rationale;
 
+  // The strategic brief that cascaded from the Strategy desk.
+  const sb = (item.brief ?? {}) as { angle?: string; key_message?: string; creative_direction?: string; cta?: string; platform?: string };
+
   const brief = (
     <section className="card p-4">
       <div className="mb-3 text-sm font-semibold">The brief</div>
@@ -123,14 +126,27 @@ export default async function ContentDetailPage({
         <Field label="Objective" value={item.objective ? (OBJECTIVE_LABELS[item.objective as Objective] ?? item.objective) : null} />
         <Field label="Chosen format" value={formatType} />
         <Field label="Content pillar" value={pillarRow?.name ?? null} />
+        <Field label="Platform" value={sb.platform ?? item.platform ?? null} />
         <Field label="Campaign" value={item.campaign} />
-        {formatWhy ? (
-          <div>
-            <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Why this format</div>
-            <div className="mt-0.5 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>{formatWhy}</div>
-          </div>
-        ) : null}
       </div>
+
+      {/* Strategy's creative brief — what to say + what to make */}
+      {(sb.angle || sb.key_message || sb.creative_direction || sb.cta) ? (
+        <div className="mt-3 space-y-2.5 rounded-xl p-3" style={{ background: "var(--accent-soft)" }}>
+          <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--accent-ink)" }}>Strategy's direction</div>
+          {sb.angle ? <div><div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Angle</div><div className="text-xs leading-relaxed">{sb.angle}</div></div> : null}
+          {sb.key_message ? <div><div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Key message</div><div className="text-xs leading-relaxed">{sb.key_message}</div></div> : null}
+          {sb.creative_direction ? <div><div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Creative direction</div><div className="text-xs leading-relaxed">{sb.creative_direction}</div></div> : null}
+          {sb.cta ? <div><div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>CTA</div><div className="text-xs leading-relaxed">{sb.cta}</div></div> : null}
+        </div>
+      ) : null}
+
+      {formatWhy ? (
+        <div className="mt-3">
+          <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Why this format</div>
+          <div className="mt-0.5 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>{formatWhy}</div>
+        </div>
+      ) : null}
     </section>
   );
 

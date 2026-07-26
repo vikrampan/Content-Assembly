@@ -1,16 +1,15 @@
 import { requireAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { hasAnthropic } from "@/lib/ai/strategist";
-import type { AiPersona, ContentPillar, Workspace } from "@/lib/types";
+import type { ContentPillar, Workspace } from "@/lib/types";
 import { StrategyCockpit } from "./StrategyCockpit";
 
 export default async function StrategyPage() {
   await requireAccess("strategy");
 
   const supabase = await createClient();
-  const [{ data }, { data: personas }, { data: pillarRows }] = await Promise.all([
+  const [{ data }, { data: pillarRows }] = await Promise.all([
     supabase.from("workspaces").select("*").order("name"),
-    supabase.from("ai_personas").select("*").order("name"),
     supabase.from("content_pillars").select("*").order("sort"),
   ]);
   const workspaces = (data as Workspace[]) ?? [];
@@ -38,7 +37,7 @@ export default async function StrategyPage() {
           Create a brand first, then plan its month.
         </div>
       ) : (
-        <StrategyCockpit workspaces={workspaces} personas={(personas as AiPersona[]) ?? []} pillars={(pillarRows as ContentPillar[]) ?? []} />
+        <StrategyCockpit workspaces={workspaces} pillars={(pillarRows as ContentPillar[]) ?? []} />
       )}
     </div>
   );

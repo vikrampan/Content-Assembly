@@ -154,7 +154,7 @@ export async function runStrategyDesk(input: {
 // Strategy / Monthly Plan desk (0017) — pillars + AI month planner.
 // ===========================================================================
 import type { ContentPillar } from "@/lib/types";
-import { planMonth, type PlannedPost } from "@/lib/ai/planner";
+import { planMonth, type PlannedPost, type PlanFormat } from "@/lib/ai/planner";
 import { notifyClientOf } from "@/lib/notify";
 
 async function requireStrategist() {
@@ -219,7 +219,10 @@ export async function generateMonthPlan(input: {
 /** Commit a reviewed month plan — creates every post on the calendar/pipeline. */
 export async function commitMonthPlan(input: {
   workspaceId: string; year: number; month: number; campaign?: string;
-  posts: { day: number; title: string; objective: Objective; medium: Medium; pillar: string | null; hook: string }[];
+  posts: {
+    day: number; title: string; objective: Objective; format: PlanFormat; pillar: string | null; hook: string;
+    angle?: string; keyMessage?: string; creativeDirection?: string; cta?: string; platform?: string;
+  }[];
 }): Promise<{ ok: true; created: number } | { error: string }> {
   const session = await requireStrategist();
   if (input.posts.length === 0) return { error: "Nothing to commit." };
@@ -233,13 +236,20 @@ export async function commitMonthPlan(input: {
   const pillarId = new Map(((pillarRows as ContentPillar[]) ?? []).map((p) => [p.name.toLowerCase(), p.id]));
   const subject = wsRow?.subject ?? null;
 
+  const t = (s?: string) => (s && s.trim() ? s.trim() : null);
   const rows = input.posts.map((p) => {
-    const decision = decideFormat(p.objective, p.medium, subject);
+    // Format is chosen deliberately by Strategy; decideFormat only supplies the
+    // archetype description/rationale (reel/carousel/story map to its post|reel axis).
+    const decision = decideFormat(p.objective, p.format === "reel" ? "reel" : "post", subject);
     const date = `${input.year}-${String(input.month + 1).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+    const brief = {
+      angle: t(p.angle), key_message: t(p.keyMessage), creative_direction: t(p.creativeDirection),
+      cta: t(p.cta), platform: t(p.platform), format: p.format,
+    };
     return {
       workspace_id: input.workspaceId,
       title: p.title.trim() || "Untitled post",
-      format: decision.dbFormat,
+      format: p.format,
       status: "ideation",
       stage: "planning",
       objective: p.objective,
@@ -250,6 +260,10 @@ export async function commitMonthPlan(input: {
       pillar_id: p.pillar ? pillarId.get(p.pillar.toLowerCase()) ?? null : null,
       campaign: input.campaign?.trim() || null,
       created_by: session.userId,
+      // The strategic brief that cascades to every desk.
+      brief,
+      content_direction: t(p.angle),
+      platform: t(p.platform),
     };
   });
 
