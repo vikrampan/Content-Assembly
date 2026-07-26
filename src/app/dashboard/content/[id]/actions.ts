@@ -10,7 +10,7 @@ import { draftCopy } from "@/lib/ai/strategist";
 import { decideFormat, type Objective, type Medium } from "@/lib/mendly/strategy";
 import { notifyClientReviewReady } from "@/lib/email/resend";
 import { notifyClientOf, notifyDepartments } from "@/lib/notify";
-import type { ContentItem, Workspace } from "@/lib/types";
+import type { ContentItem, Workspace, ContentBody } from "@/lib/types";
 
 export type ActionResult = { ok: true; message?: string } | { error: string };
 
@@ -147,6 +147,53 @@ export async function updateContent(input: {
       educational_shift: norm(input.educationalShift),
       solution: norm(input.solution),
     })
+    .eq("id", input.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/dashboard/content/${input.id}`);
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Saved." };
+}
+
+/** Derive the legacy hook/bridge/cta columns from a format-shaped body so older
+ *  readers (client cards, calendar) still show something sensible. */
+function legacyFromBody(format: string, body: ContentBody): { hook: string | null; bridge: string | null; cta: string | null } {
+  const n = (s?: string) => (s && s.trim() ? s.trim() : null);
+  if (format === "carousel") {
+    const b = body as import("@/lib/types").CarouselBody;
+    return { hook: n(b.slides?.[0]?.heading), bridge: n(b.slides?.length ? `${b.slides.length} slides` : ""), cta: n(b.caption) };
+  }
+  if (format === "reel") {
+    const b = body as import("@/lib/types").ReelBody;
+    return { hook: n(b.hook_text), bridge: n(b.caption), cta: n(b.beats?.length ? `${b.beats.length} beats` : "") };
+  }
+  if (format === "story") {
+    const b = body as import("@/lib/types").StoryBody;
+    return { hook: n(b.frames?.[0]?.text), bridge: null, cta: null };
+  }
+  const b = body as import("@/lib/types").PostBody;
+  return { hook: n(b.hook), bridge: n(b.body), cta: n(b.cta) };
+}
+
+/** Save the format-shaped content body (script / slides / caption) + title. */
+export async function saveContentBody(input: { id: string; title: string; format: string; body: ContentBody }): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const title = input.title.trim();
+  if (!title) return { error: "Title cannot be empty." };
+
+  const supabase = await createClient();
+  const { data: prev } = await supabase
+    .from("content_items")
+    .select("id, workspace_id, hook, educational_shift, solution, tone")
+    .eq("id", input.id)
+    .single<Pick<ContentItem, "id" | "workspace_id" | "hook" | "educational_shift" | "solution" | "tone">>();
+  if (prev) await snapshot(supabase, prev, session.userId, "Manual edit");
+
+  const legacy = legacyFromBody(input.format, input.body);
+  const { error } = await supabase
+    .from("content_items")
+    .update({ title, content_body: input.body, hook: legacy.hook, educational_shift: legacy.bridge, solution: legacy.cta })
     .eq("id", input.id);
   if (error) return { error: error.message };
 

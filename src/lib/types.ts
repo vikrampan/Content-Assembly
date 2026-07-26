@@ -3,7 +3,20 @@
 
 export type AccountType = "admin" | "team_incharge" | "client";
 export type MembershipRole = "team_incharge" | "client";
-export type ContentFormat = "post" | "carousel" | "reel";
+export type ContentFormat = "post" | "carousel" | "reel" | "story";
+
+// Format-shaped content body — the source of truth for what the creator writes.
+// The shape changes with the format so a reel is a script, a carousel is slides,
+// a post is a caption. Legacy hook/educational_shift/solution stay in sync for
+// backward-compatible readers.
+export interface PostBody { hook?: string; body?: string; cta?: string; caption?: string; hashtags?: string[] }
+export interface CarouselSlide { heading?: string; body?: string }
+export interface CarouselBody { slides?: CarouselSlide[]; caption?: string; hashtags?: string[] }
+export interface ReelBeat { time?: string; scene?: string; on_screen?: string; voiceover?: string }
+export interface ReelBody { hook_text?: string; beats?: ReelBeat[]; audio?: string; duration_sec?: number; caption?: string; hashtags?: string[] }
+export interface StoryFrame { text?: string; sticker?: string }
+export interface StoryBody { frames?: StoryFrame[]; link?: string }
+export type ContentBody = PostBody | CarouselBody | ReelBody | StoryBody;
 export type AssetKind = "raw" | "generated" | "final";
 
 export type ContentStatus =
@@ -166,6 +179,11 @@ export interface ContentItem {
   hook: string | null;
   educational_shift: string | null;
   solution: string | null;
+  // Stage 05 — the format-shaped body (script/slides/caption). Legacy trio above
+  // stays synced for older readers.
+  content_body: ContentBody | null;
+  content_direction: string | null;
+  platform: string | null;
   shared_with_client: boolean;
   assigned_to: string | null;
   created_by: string | null;
