@@ -24,6 +24,8 @@ export async function PlanView() {
   const approval = apprRaw as CalendarApproval | null;
 
   const creativesBy = await creativesFor(supabase, calendar.map((c) => c.id));
+  const { data: pillarRows } = await supabase.from("content_pillars").select("id, name").eq("workspace_id", ws.id);
+  const pmap = new Map(((pillarRows as { id: string; name: string }[]) ?? []).map((p) => [p.id, p.name]));
 
   // Suggestion counts.
   const suggestionCounts = new Map<string, number>();
@@ -32,14 +34,15 @@ export async function PlanView() {
     for (const r of (sugg as { content_id: string }[]) ?? []) suggestionCounts.set(r.content_id, (suggestionCounts.get(r.content_id) ?? 0) + 1);
   }
 
-  const posts: CalPost[] = calendar.map((c) => {
-    const cr = creativesBy.get(c.id)?.[0];
-    return {
-      id: c.id, title: c.title, stage: c.stage, format: c.format, planned_date: c.planned_date!,
-      hook: c.hook, bridge: c.educational_shift, cta: c.solution,
-      creative: cr?.url ?? null, isVideo: cr?.isVideo ?? false, suggestions: suggestionCounts.get(c.id) ?? 0,
-    };
-  });
+  const posts: CalPost[] = calendar.map((c) => ({
+    id: c.id, title: c.title, stage: c.stage, format: c.format, planned_date: c.planned_date!,
+    objective: c.objective, campaign: c.campaign, pillar: c.pillar_id ? pmap.get(c.pillar_id) ?? null : null,
+    platform: c.platform, formatType: c.format_type,
+    brief: (c.brief as CalPost["brief"]) ?? null,
+    body: (c.content_body as CalPost["body"]) ?? null,
+    hook: c.hook, bridge: c.educational_shift, cta: c.solution,
+    creatives: creativesBy.get(c.id) ?? [], suggestions: suggestionCounts.get(c.id) ?? 0,
+  }));
 
   return (
     <div className="space-y-5">
@@ -51,7 +54,7 @@ export async function PlanView() {
       {calendar.length === 0 ? (
         <div className="card p-10 text-center text-sm" style={{ color: "var(--muted)" }}>Your team is preparing this month&apos;s plan.</div>
       ) : (
-        <CalendarView year={y} month={m} posts={posts} accent={accent} />
+        <CalendarView year={y} month={m} posts={posts} accent={accent} brandName={ws.name} />
       )}
     </div>
   );
