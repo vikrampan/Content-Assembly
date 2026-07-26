@@ -2,6 +2,7 @@ import type { Asset } from "@/lib/types";
 import { accentOf, brandFonts, BrandStyle, clientWorkspace, logoUrlOf, SectionHeader } from "./shared";
 import { BrandBookForm } from "../brands/[id]/BrandBookForm";
 import { BrandBookSections } from "../brands/[id]/BrandBookSections";
+import { BrandBookCopilot } from "./BrandBookCopilot";
 
 function Swatch({ hex, label }: { hex: string; label: string }) {
   const clean = hex.replace(/^#/, "");
@@ -60,6 +61,10 @@ export async function BrandBookView() {
     <div className="space-y-6">
       <BrandStyle faces={faces} />
       <SectionHeader title="Brand Book" subtitle="See and edit your brand — every change applies everywhere your content is made, instantly." family={headlineFamily} />
+
+      {/* AI copilot — fill in / improve the brand book by asking (propose → apply) */}
+      <BrandBookCopilot workspaceId={ws.id} />
+
 
       {ws.brand_status !== "locked" ? (
         <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "var(--accent-soft)", color: "var(--accent-ink)" }}>

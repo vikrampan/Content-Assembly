@@ -287,6 +287,7 @@ export async function deleteBrandAsset(assetId: string): Promise<ActionResult> {
 // ===========================================================================
 import type { BrandBook, BrandBookVersion, Workspace } from "@/lib/types";
 import { extractBrandBook, deriveSubject, type BrandDraft, type SourceDoc } from "@/lib/ai/brandExtract";
+import { setPath } from "./[id]/brandFields";
 
 // Columns that make up a full brand-book snapshot (for history / restore).
 const BRAND_COLS =
@@ -372,6 +373,33 @@ export async function applyBrandImport(
   const { error } = await supabase.from("workspaces").update(clean).eq("id", workspaceId);
   if (error) return { error: error.message };
   revalidatePath(`/dashboard/brands/${workspaceId}`);
+  return { ok: true };
+}
+
+// Fields the client Brand Book copilot may write (mirrors COPILOT_FIELDS).
+const PATCH_COLS = new Set(["voice_tone", "voice_never", "do_rules", "never_rules", "photography_style", "subject"]);
+const PATCH_BOOK = new Set(["identity.tagline", "identity.mission", "identity.vision", "identity.positioning", "identity.audience", "identity.story", "messaging.elevator_pitch", "messaging.boilerplate", "social.bio"]);
+
+/** Apply a reviewed set of AI-proposed brand-book changes (client or staff). */
+export async function applyBrandPatch(workspaceId: string, changes: { path: string; value: string }[]): Promise<ActionResult> {
+  const { db: supabase, userId } = await requireBrandWrite(workspaceId);
+  const valid = changes.filter((c) => PATCH_COLS.has(c.path) || PATCH_BOOK.has(c.path));
+  if (valid.length === 0) return { error: "Nothing to apply." };
+
+  const { data: cur } = await supabase.from("workspaces").select("brand_book").eq("id", workspaceId).single<{ brand_book: BrandBook | null }>();
+  let book: BrandBook = cur?.brand_book ?? {};
+  const cols: Record<string, string | null> = {};
+  for (const c of valid) {
+    const v = (c.value ?? "").trim();
+    if (PATCH_COLS.has(c.path)) cols[c.path] = v || null;
+    else book = setPath(book, c.path, v) as BrandBook;
+  }
+
+  await snapshotBrand(supabase, workspaceId, userId, "AI copilot edit", "ai");
+  const { error } = await supabase.from("workspaces").update({ ...cols, brand_book: book }).eq("id", workspaceId);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/brands/${workspaceId}`);
+  revalidatePath("/dashboard/brand-book");
   return { ok: true };
 }
 

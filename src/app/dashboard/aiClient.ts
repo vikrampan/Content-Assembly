@@ -8,7 +8,7 @@ import { requireSession } from "@/lib/auth";
 import { userFunction } from "@/lib/mendly/access";
 import { createClient } from "@/lib/supabase/server";
 import { runClientAi, clientBudgetStatus, BudgetError, type BudgetStatus } from "@/lib/ai/clientAssist";
-import type { Workspace, ContentItem, PostMetric } from "@/lib/types";
+import type { Workspace, ContentItem, PostMetric, BrandBook } from "@/lib/types";
 
 export interface AiReply { text?: string; error?: string; overBudget?: boolean; budget?: BudgetStatus }
 
@@ -129,6 +129,84 @@ export async function aiExplainPost(contentId: string): Promise<AiReply> {
   return run("client_explain",
     VOICE + " In 2–3 short sentences, explain to the brand owner WHY the team made this post this way and how it helps their goals. Reassure, don't lecture.",
     ctx, 300);
+}
+
+// -------------------------------------------------------------------------
+// Brand Book copilot — propose structured changes the client reviews & applies.
+// -------------------------------------------------------------------------
+
+/** The fields the copilot may propose, with human labels. `.`-paths write into brand_book. */
+export const COPILOT_FIELDS: Record<string, string> = {
+  voice_tone: "Voice & tone",
+  voice_never: "Words it never uses",
+  do_rules: "What the brand posts",
+  never_rules: "What it never posts",
+  photography_style: "Photography style",
+  subject: "Brand subject",
+  "identity.tagline": "Tagline",
+  "identity.mission": "Mission",
+  "identity.vision": "Vision",
+  "identity.positioning": "Positioning",
+  "identity.audience": "Audience",
+  "identity.story": "Story",
+  "messaging.elevator_pitch": "Elevator pitch",
+  "messaging.boilerplate": "Boilerplate",
+  "social.bio": "Social bio",
+};
+
+export interface BrandChange { path: string; label: string; value: string; current: string }
+export interface AiBrandReply extends AiReply { note?: string; changes?: BrandChange[] }
+
+function bookVal(book: BrandBook, path: string): string {
+  const [a, b] = path.split(".");
+  const sec = (book as Record<string, Record<string, unknown> | undefined>)[a];
+  const v = sec?.[b];
+  return typeof v === "string" ? v : Array.isArray(v) ? v.join(", ") : "";
+}
+
+/** Draft brand-book field values from a plain-English instruction (no writes). */
+export async function aiBrandBookDraft(instruction: string): Promise<AiBrandReply> {
+  const q = instruction.trim();
+  if (!q) return { error: "Tell me what to fill in — e.g. “write my mission and a tagline”." };
+  const { db, userId, ws } = await clientCtx();
+  if (!ws) return { error: "Your brand workspace isn't set up yet." };
+  const book = ws.brand_book ?? {};
+
+  const currentOf = (path: string): string => {
+    if (path.includes(".")) return bookVal(book, path);
+    const v = (ws as unknown as Record<string, unknown>)[path];
+    return typeof v === "string" ? v : "";
+  };
+
+  const facts = [
+    `Brand: ${ws.name}`,
+    ws.subject && `Makes: ${ws.subject}`,
+    ws.voice_tone && `Current voice: ${ws.voice_tone}`,
+    book.identity?.positioning && `Positioning: ${book.identity.positioning}`,
+    book.identity?.story && `Story: ${book.identity.story}`,
+    book.identity?.mission && `Mission: ${book.identity.mission}`,
+  ].filter(Boolean).join("\n");
+
+  const fieldList = Object.entries(COPILOT_FIELDS).map(([p, l]) => `- ${p}: ${l}`).join("\n");
+  const system =
+    "You help a brand OWNER fill in their brand book. Propose concise, on-brand values for ONLY these fields (use the exact path):\n" +
+    fieldList +
+    "\nRules: only propose fields relevant to the request; ground everything in the brand facts and never contradict them; keep each value tight (a phrase or 1–2 sentences; 'subject' is a short noun like 'the coffee'). " +
+    "Return ONLY minified JSON, no prose: {\"note\":\"one friendly sentence to the owner\",\"changes\":[{\"path\":\"identity.tagline\",\"value\":\"...\"}]}";
+
+  try {
+    const res = await runClientAi({ db, userId, workspaceId: ws.id, purpose: "client_brandbook", system, user: `Brand facts:\n${facts}\n\nRequest: ${q}`, maxTokens: 700 });
+    const json = res.text.slice(res.text.indexOf("{"), res.text.lastIndexOf("}") + 1);
+    const parsed = JSON.parse(json) as { note?: string; changes?: { path: string; value: string }[] };
+    const changes: BrandChange[] = (parsed.changes ?? [])
+      .filter((c) => c && COPILOT_FIELDS[c.path] && typeof c.value === "string" && c.value.trim())
+      .map((c) => ({ path: c.path, label: COPILOT_FIELDS[c.path], value: c.value.trim(), current: currentOf(c.path) }));
+    if (changes.length === 0) return { text: parsed.note || "I couldn't find anything to fill for that — try being more specific.", budget: res.budget };
+    return { text: parsed.note || "Here's what I'd suggest:", note: parsed.note, changes, budget: res.budget };
+  } catch (e) {
+    if (e instanceof BudgetError) return { error: e.message, overBudget: true };
+    return { error: "I had trouble drafting that. Try rephrasing your request." };
+  }
 }
 
 /** Concierge: answer any question grounded in the client's own brand + calendar. */
