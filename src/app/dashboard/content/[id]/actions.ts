@@ -189,10 +189,10 @@ export async function draftContentBody(contentId: string, tone?: string): Promis
   const { data: ws } = await supabase.from("workspaces").select("*").eq("id", item.workspace_id).single<Workspace>();
   if (!ws) return { error: "Brand not found." };
 
-  const sb = (item.brief ?? {}) as { angle?: string; key_message?: string; creative_direction?: string; cta?: string; platform?: string };
+  const sb = (item.brief ?? {}) as { angle?: string; key_message?: string; creative_direction?: string; cta?: string; platform?: string; plan?: { purpose: string; note: string }[] };
   const body = await draftBody(ws, item.format, {
     title: item.title, objective: item.objective, angle: sb.angle, keyMessage: sb.key_message,
-    creativeDirection: sb.creative_direction, cta: sb.cta, platform: sb.platform, hook: item.hook,
+    creativeDirection: sb.creative_direction, cta: sb.cta, platform: sb.platform, hook: item.hook, plan: sb.plan,
   }, tone);
   if (!body) return { error: "Couldn't draft — check ANTHROPIC_API_KEY on the server." };
   return { ok: true, body };

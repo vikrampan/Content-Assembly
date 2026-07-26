@@ -18,7 +18,11 @@ export interface DraftBrief {
   cta?: string | null;
   platform?: string | null;
   hook?: string | null;
+  /** Strategy's per-slide/beat/frame plan — the drafter fills each to its purpose. */
+  plan?: { purpose: string; note: string }[] | null;
 }
+
+const PLAN_NOUN: Record<ContentFormat, string> = { post: "", carousel: "slides", reel: "beats", story: "frames" };
 
 const SHAPE: Record<ContentFormat, string> = {
   post: `{"hook":"one scroll-stopping line","body":"the value/proof, 1-2 sentences","cta":"one directive","caption":"the full caption","hashtags":["#tag"]}`,
@@ -76,6 +80,12 @@ export async function draftBody(ws: Workspace, format: ContentFormat, brief: Dra
     ws.voice_never ? `Never say: ${ws.voice_never}.` : "",
   ].filter(Boolean).join(" ");
 
+  const plan = (brief.plan ?? []).filter((p) => p.purpose || p.note);
+  const planText = plan.length && PLAN_NOUN[format]
+    ? `\nProduce EXACTLY ${plan.length} ${PLAN_NOUN[format]}, in this order — each must fulfil its purpose:\n` +
+      plan.map((p, i) => `${i + 1}. ${p.purpose}${p.note ? ` — ${p.note}` : ""}`).join("\n")
+    : "";
+
   const briefText = [
     `Title: ${brief.title}`,
     brief.objective && `Objective: ${brief.objective}`,
@@ -86,6 +96,7 @@ export async function draftBody(ws: Workspace, format: ContentFormat, brief: Dra
     brief.platform && `Platform: ${brief.platform}`,
     brief.hook && `Starter hook: ${brief.hook}`,
     tone && `Tone: ${tone}`,
+    planText,
   ].filter(Boolean).join("\n");
 
   const system = [
