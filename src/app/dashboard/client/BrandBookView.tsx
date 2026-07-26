@@ -57,13 +57,24 @@ export async function BrandBookView() {
     ...(ws.palette ?? []).map((p) => ({ hex: p.hex, label: p.name || "Swatch" })),
   ].filter(Boolean) as { hex: string; label: string }[];
 
+  // Brand-book completeness — drives the copilot's guidance meter.
+  const bb = ws.brand_book ?? {};
+  const checks = [
+    ws.primary_hex, ws.secondary_hex, ws.accent_hex, ws.headline_font, ws.body_font, ws.logo_path,
+    ws.voice_tone, ws.voice_never, ws.do_rules, ws.never_rules, ws.photography_style, ws.subject,
+    bb.identity?.tagline, bb.identity?.mission, bb.identity?.positioning, bb.identity?.audience, bb.identity?.story,
+    bb.messaging?.elevator_pitch, bb.social?.bio,
+  ];
+  const filled = checks.filter((v) => v && String(v).trim()).length;
+  const total = checks.length;
+
   return (
     <div className="space-y-6">
       <BrandStyle faces={faces} />
       <SectionHeader title="Brand Book" subtitle="See and edit your brand — every change applies everywhere your content is made, instantly." family={headlineFamily} />
 
       {/* AI copilot — fill in / improve the brand book by asking (propose → apply) */}
-      <BrandBookCopilot workspaceId={ws.id} />
+      <BrandBookCopilot workspaceId={ws.id} filled={filled} total={total} />
 
 
       {ws.brand_status !== "locked" ? (

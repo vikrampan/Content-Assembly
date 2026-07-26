@@ -135,8 +135,9 @@ export async function aiExplainPost(contentId: string): Promise<AiReply> {
 // Brand Book copilot — propose structured changes the client reviews & applies.
 // -------------------------------------------------------------------------
 
-/** The fields the copilot may propose, with human labels. `.`-paths write into brand_book. */
-export const COPILOT_FIELDS: Record<string, string> = {
+/** The fields the copilot may propose, with human labels. `.`-paths write into
+ *  brand_book. NOT exported — a "use server" file may only export async functions. */
+const COPILOT_FIELDS: Record<string, string> = {
   voice_tone: "Voice & tone",
   voice_never: "Words it never uses",
   do_rules: "What the brand posts",

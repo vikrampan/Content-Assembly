@@ -22,7 +22,9 @@ function pctOf(b?: { used: number; limit: number }) {
   return b && b.limit ? Math.min(100, Math.round((b.used / b.limit) * 100)) : 0;
 }
 
-export function BrandBookCopilot({ workspaceId }: { workspaceId: string }) {
+export function BrandBookCopilot({ workspaceId, filled = 0, total = 0 }: { workspaceId: string; filled?: number; total?: number }) {
+  const complete = total ? Math.round((filled / total) * 100) : 100;
+  const missing = Math.max(0, total - filled);
   const [input, setInput] = useState("");
   const [items, setItems] = useState<Item[] | null>(null);
   const job = useAsync<Awaited<ReturnType<typeof aiBrandBookDraft>>>();
@@ -60,11 +62,27 @@ export function BrandBookCopilot({ workspaceId }: { workspaceId: string }) {
       <div className="p-4 sm:p-5" style={{ background: "linear-gradient(120deg, var(--accent-soft), transparent 70%)" }}>
         <div className="flex items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-lg" style={{ background: "var(--accent)", color: "#fff" }}>✦</span>
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">Brand Book assistant</div>
-            <div className="text-xs" style={{ color: "var(--muted)" }}>Ask me to fill in or improve your brand — I draft it, you approve.</div>
+            <div className="text-xs" style={{ color: "var(--muted)" }}>
+              {missing > 0
+                ? `Your brand book is ${complete}% complete — I can fill the rest.`
+                : "Ask me to refine or rewrite any part of your brand."}
+            </div>
           </div>
         </div>
+
+        {/* Completeness meter */}
+        {total > 0 ? (
+          <div className="mt-3 flex items-center gap-2.5">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: "var(--panel)" }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${complete}%`, background: complete >= 100 ? "var(--good)" : "var(--accent)" }} />
+            </div>
+            <span className="shrink-0 text-[11px] font-semibold tabular-nums" style={{ color: complete >= 100 ? "var(--good)" : "var(--accent-ink)" }}>
+              {complete >= 100 ? "Complete ✓" : `${filled}/${total} filled`}
+            </span>
+          </div>
+        ) : null}
 
         <form onSubmit={(e) => { e.preventDefault(); ask(input); }} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="e.g. write my mission and a warm, premium tagline"
