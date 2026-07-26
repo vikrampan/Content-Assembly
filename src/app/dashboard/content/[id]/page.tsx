@@ -171,7 +171,7 @@ export default async function ContentDetailPage({
         {hasMain ? (
           <div className="min-w-0 space-y-5">
             {V.conversation ? <SuggestionThread contentId={item.id} messages={suggestions.map((c) => ({ id: c.id, body: c.body, mine: c.author_id === meId }))} /> : null}
-            {V.copy ? <ContentEditor item={item} versions={versions} /> : null}
+            {V.copy ? <ContentEditor item={item} versions={versions} brand={{ name: ws?.name ?? "Brand", accent: ws?.accent_hex ? `#${ws.accent_hex}` : ws?.primary_hex ? `#${ws.primary_hex}` : "#C8853F" }} /> : null}
             {V.studio ? <CopyStudio item={item} variants={variants} /> : null}
             {V.deliverables ? <Deliverables contentId={item.id} workspaceId={item.workspace_id} items={deliverables} /> : null}
             {V.qa ? <QaFirewall contentId={item.id} stage={item.stage} initial={item.qa_checklist} initialNotes={item.qa_notes} checklist={checklist} brandFirewall={brandGroups.length > 0} /> : null}

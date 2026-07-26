@@ -3,8 +3,9 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ContentItem, ContentVersion, ContentBody } from "@/lib/types";
-import { regenerateCopy, restoreVersion, saveContentBody } from "./actions";
+import { draftContentBody, restoreVersion, saveContentBody } from "./actions";
 import { FormatBody } from "./FormatBody";
+import { ContentPreview } from "./ContentPreview";
 
 const inputCls = "w-full rounded-lg px-3 py-2 text-sm outline-none";
 const inputStyle = { background: "var(--panel-2)", border: "1px solid var(--line-2)", color: "var(--ink)" } as const;
@@ -37,7 +38,7 @@ function timeAgo(iso: string) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-export function ContentEditor({ item, versions }: { item: ContentItem; versions: ContentVersion[] }) {
+export function ContentEditor({ item, versions, brand }: { item: ContentItem; versions: ContentVersion[]; brand: { name: string; accent: string } }) {
   const seed = useMemo(() => seedBody(item), [item]);
   const [title, setTitle] = useState(item.title ?? "");
   const [body, setBody] = useState<ContentBody>(seed);
@@ -58,12 +59,12 @@ export function ContentEditor({ item, versions }: { item: ContentItem; versions:
       else { setFeedback({ kind: "ok", text: "Saved." }); router.refresh(); }
     });
   }
-  function regenerate() {
+  function draftForMe() {
     setFeedback(null);
     startTransition(async () => {
-      const res = await regenerateCopy(item.id, tone);
+      const res = await draftContentBody(item.id, tone);
       if ("error" in res) setFeedback({ kind: "err", text: res.error });
-      else { setFeedback({ kind: "ok", text: res.message ?? "Regenerated." }); router.refresh(); }
+      else { setBody(res.body); setFeedback({ kind: "ok", text: "Drafted from the brief — review and Save." }); }
     });
   }
   function restore(id: string) {
@@ -92,9 +93,9 @@ export function ContentEditor({ item, versions }: { item: ContentItem; versions:
         </div>
       </div>
 
-      {/* AI regeneration bar */}
+      {/* AI draft bar — never start from a blank post */}
       <div className="mb-4 rounded-xl p-3" style={{ background: "var(--accent-soft)", border: "1px solid var(--line)" }}>
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--accent-ink)" }}>Regenerate on-brand with AI</div>
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--accent-ink)" }}>Draft on-brand from Strategy&apos;s brief</div>
         <div className="mb-2 flex flex-wrap gap-1.5">
           {TONES.map((t) => (
             <button key={t} type="button" onClick={() => setTone(t)} className="rounded-full px-2.5 py-1 text-xs font-medium transition"
@@ -105,8 +106,8 @@ export function ContentEditor({ item, versions }: { item: ContentItem; versions:
         </div>
         <div className="flex flex-wrap gap-2">
           <input className={inputCls} style={{ ...inputStyle, flex: 1, minWidth: 180 }} value={tone} onChange={(e) => setTone(e.target.value)} placeholder="…or type a custom angle" />
-          <button type="button" onClick={regenerate} disabled={pending} className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--accent)" }}>
-            {pending ? "Working…" : "✦ Regenerate"}
+          <button type="button" onClick={draftForMe} disabled={pending} className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--accent)" }}>
+            {pending ? "Drafting…" : "✦ Draft this post for me"}
           </button>
         </div>
       </div>
@@ -132,24 +133,33 @@ export function ContentEditor({ item, versions }: { item: ContentItem; versions:
         </div>
       ) : null}
 
-      {/* Title + format-aware body */}
-      <label className="mb-3 block text-xs">
-        <span className="mb-1 block" style={{ color: "var(--muted)" }}>Title</span>
-        <input className={inputCls} style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
-      <FormatBody format={item.format} body={body} onChange={setBody} />
+      {/* Title + format-aware body + live preview */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="min-w-0">
+          <label className="mb-3 block text-xs">
+            <span className="mb-1 block" style={{ color: "var(--muted)" }}>Title</span>
+            <input className={inputCls} style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          <FormatBody format={item.format} body={body} onChange={setBody} />
 
-      {feedback ? (
-        <div className="mt-3 rounded-lg px-3 py-2 text-xs" style={feedback.kind === "ok"
-          ? { background: "var(--good-soft)", color: "var(--good)" }
-          : { background: "rgba(192,85,63,.12)", color: "var(--danger)" }}>
-          {feedback.text}
+          {feedback ? (
+            <div className="mt-3 rounded-lg px-3 py-2 text-xs" style={feedback.kind === "ok"
+              ? { background: "var(--good-soft)", color: "var(--good)" }
+              : { background: "rgba(192,85,63,.12)", color: "var(--danger)" }}>
+              {feedback.text}
+            </div>
+          ) : null}
+
+          <button type="button" onClick={save} disabled={pending || !dirty} className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--ink)" }}>
+            {pending ? "Saving…" : "Save"}
+          </button>
         </div>
-      ) : null}
 
-      <button type="button" onClick={save} disabled={pending || !dirty} className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50" style={{ background: "var(--ink)" }}>
-        {pending ? "Saving…" : "Save"}
-      </button>
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>Live preview</div>
+          <ContentPreview format={item.format} body={body} brand={brand} />
+        </div>
+      </div>
     </section>
   );
 }

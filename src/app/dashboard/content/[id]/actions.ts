@@ -7,6 +7,7 @@ import { userFunction } from "@/lib/mendly/access";
 import { QA_FIREWALL } from "@/lib/mendly/pipeline";
 import { STAGE_LABEL, deskStage, isValidStage, nextStage, prevStage } from "@/lib/mendly/stages";
 import { draftCopy } from "@/lib/ai/strategist";
+import { draftBody } from "@/lib/ai/bodyDrafter";
 import { decideFormat, type Objective, type Medium } from "@/lib/mendly/strategy";
 import { notifyClientReviewReady } from "@/lib/email/resend";
 import { notifyClientOf, notifyDepartments } from "@/lib/notify";
@@ -173,6 +174,28 @@ function legacyFromBody(format: string, body: ContentBody): { hook: string | nul
   }
   const b = body as import("@/lib/types").PostBody;
   return { hook: n(b.hook), bridge: n(b.body), cta: n(b.cta) };
+}
+
+/** Draft a full format-shaped body from Strategy's brief (returns it for review — no save). */
+export async function draftContentBody(contentId: string, tone?: string): Promise<{ ok: true; body: ContentBody } | { error: string }> {
+  const session = await requireSession();
+  if (session.role === "client") return { error: "Not authorized." };
+  const supabase = await createClient();
+  const { data: item } = await supabase
+    .from("content_items").select("format, title, objective, hook, brief, workspace_id")
+    .eq("id", contentId)
+    .single<Pick<ContentItem, "format" | "title" | "objective" | "hook" | "brief" | "workspace_id">>();
+  if (!item) return { error: "Post not found." };
+  const { data: ws } = await supabase.from("workspaces").select("*").eq("id", item.workspace_id).single<Workspace>();
+  if (!ws) return { error: "Brand not found." };
+
+  const sb = (item.brief ?? {}) as { angle?: string; key_message?: string; creative_direction?: string; cta?: string; platform?: string };
+  const body = await draftBody(ws, item.format, {
+    title: item.title, objective: item.objective, angle: sb.angle, keyMessage: sb.key_message,
+    creativeDirection: sb.creative_direction, cta: sb.cta, platform: sb.platform, hook: item.hook,
+  }, tone);
+  if (!body) return { error: "Couldn't draft — check ANTHROPIC_API_KEY on the server." };
+  return { ok: true, body };
 }
 
 /** Save the format-shaped content body (script / slides / caption) + title. */
