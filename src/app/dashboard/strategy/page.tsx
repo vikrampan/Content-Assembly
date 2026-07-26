@@ -4,6 +4,9 @@ import { hasAnthropic } from "@/lib/ai/strategist";
 import type { ContentPillar, Workspace } from "@/lib/types";
 import { StrategyCockpit } from "./StrategyCockpit";
 
+// Fable 5 month-planning + audit can run long; give the server action room.
+export const maxDuration = 300;
+
 export default async function StrategyPage() {
   await requireAccess("strategy");
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ContentPillar } from "@/lib/types";
 import { OBJECTIVE_LABELS, type Objective } from "@/lib/mendly/strategy";
-import { commitMonthPlan, generateMonthPlan } from "./actions";
+import { commitMonthPlan, generateMonthPlan, auditMonth, type AuditFinding } from "./actions";
 import type { PlannedPost, PlanFormat } from "@/lib/ai/planner";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -44,11 +44,14 @@ export function MonthPlanner({ workspaceId, pillars }: { workspaceId: string; pi
   const [month, setMonth] = useState(now.getMonth());
   const [count, setCount] = useState(12);
   const [goals, setGoals] = useState("");
+  const [strategy, setStrategy] = useState("");
   const [campaign, setCampaign] = useState("");
   const [rows, setRows] = useState<Row[] | null>(null);
   const [openBrief, setOpenBrief] = useState<Set<number>>(new Set());
   const [msg, setMsg] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
   const [phase, setPhase] = useState<"idle" | "generating" | "review" | "committing">("idle");
+  const [audit, setAudit] = useState<{ summary: string; findings: AuditFinding[] } | null>(null);
+  const [auditing, setAuditing] = useState(false);
   const [, start] = useTransition();
   const router = useRouter();
 
@@ -60,7 +63,17 @@ export function MonthPlanner({ workspaceId, pillars }: { workspaceId: string; pi
     setYear(d.getFullYear()); setMonth(d.getMonth());
   }
   function blankRow(): Row {
-    return { day: 1, title: "", objective: OBJS[0], format: "post", pillar: pillarNames[0] ?? null, hook: "", angle: "", keyMessage: "", creativeDirection: "", cta: "", platform: "Instagram", rationale: "" };
+    return { day: 1, title: "", objective: OBJS[0], format: "post", pillar: pillarNames[0] ?? null, hook: "", angle: "", keyMessage: "", creativeDirection: "", cta: "", platform: "Instagram", plan: [], rationale: "" };
+  }
+
+  function runAudit() {
+    setAudit(null); setAuditing(true);
+    start(async () => {
+      const res = await auditMonth({ workspaceId, year, month });
+      setAuditing(false);
+      if ("error" in res) setMsg({ kind: "err", text: res.error });
+      else setAudit({ summary: res.summary, findings: res.findings });
+    });
   }
   function startManual() { setMsg(null); setRows([blankRow()]); setPhase("review"); setOpenBrief(new Set([0])); }
   function addRow() {
@@ -73,9 +86,9 @@ export function MonthPlanner({ workspaceId, pillars }: { workspaceId: string; pi
   function toggleBrief(i: number) { setOpenBrief((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; }); }
 
   function generate() {
-    setMsg(null); setPhase("generating"); setRows(null);
+    setMsg(null); setPhase("generating"); setRows(null); setAudit(null);
     start(async () => {
-      const res = await generateMonthPlan({ workspaceId, year, month, count, goals });
+      const res = await generateMonthPlan({ workspaceId, year, month, count, goals, strategy });
       if ("error" in res) { setMsg({ kind: "err", text: res.error }); setPhase("idle"); return; }
       setRows(res.posts); setPhase("review"); setOpenBrief(new Set());
     });
@@ -140,11 +153,47 @@ export function MonthPlanner({ workspaceId, pillars }: { workspaceId: string; pi
           <button type="button" onClick={startManual} disabled={phase === "generating" || phase === "committing"} className="rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:brightness-95 disabled:opacity-50" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>
             + Build manually
           </button>
+          <button type="button" onClick={runAudit} disabled={auditing || phase === "generating"} className="rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:brightness-95 disabled:opacity-50" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>
+            {auditing ? "Auditing…" : "🔍 Audit this month"}
+          </button>
         </div>
+
+        {/* Brief the copilot */}
+        <label className="mt-3 block text-xs">
+          <span className="mb-1 block font-semibold" style={{ color: "var(--accent-ink)" }}>✦ Brief the strategist (Fable 5)</span>
+          <textarea value={strategy} onChange={(e) => setStrategy(e.target.value)} rows={2}
+            placeholder="This month: summer alkaline-salt launch · lean on the Sambhar-Lake origin story · drive to puresol.in · heavy on reels for reach · one carousel/week for education · launch-countdown stories in week 1"
+            className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle} />
+        </label>
         <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
-          Every post is a full <b>brief</b> — format, angle, key message, and creative direction — that cascades to the Content &amp; Production desks so they execute your plan, not improvise it.
+          Tell it your strategy — it plans the whole month as full <b>briefs</b> (format, angle, creative direction, and the slide/beat plan), grounded in your brand, calendar, and what performed. Everything cascades to the desks.
         </p>
       </div>
+
+      {/* Audit report */}
+      {audit ? (
+        <div className="card p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-sm font-semibold">🔍 Month audit</span>
+            <button type="button" onClick={() => setAudit(null)} className="ml-auto text-xs" style={{ color: "var(--faint)" }}>Dismiss</button>
+          </div>
+          {audit.summary ? <p className="mb-3 text-sm" style={{ color: "var(--muted)" }}>{audit.summary}</p> : null}
+          <div className="space-y-2">
+            {audit.findings.map((f, i) => {
+              const tone = f.severity === "good" ? { bg: "var(--good-soft)", c: "var(--good)", icon: "✓" } : f.severity === "gap" ? { bg: "rgba(192,85,63,.12)", c: "var(--danger)", icon: "◆" } : { bg: "var(--accent-soft)", c: "var(--accent-ink)", icon: "!" };
+              return (
+                <div key={i} className="flex gap-2.5 rounded-lg p-2.5" style={{ background: tone.bg }}>
+                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white" style={{ background: tone.c }}>{tone.icon}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold" style={{ color: tone.c }}>{f.title}</div>
+                    {f.detail ? <div className="text-xs leading-relaxed" style={{ color: "var(--ink)" }}>{f.detail}</div> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {msg ? (
         <div className="rounded-lg px-3 py-2 text-xs" style={
@@ -210,6 +259,19 @@ export function MonthPlanner({ workspaceId, pillars }: { workspaceId: string; pi
                         <input value={p.hook} onChange={(e) => patch(i, { hook: e.target.value })} className={cellCls} style={inputStyle} placeholder="Scroll-stopping line" /></label>
                       <label className="block text-[11px]"><span className="mb-0.5 block" style={{ color: "var(--muted)" }}>CTA</span>
                         <input value={p.cta} onChange={(e) => patch(i, { cta: e.target.value })} className={cellCls} style={inputStyle} placeholder="The call to action" /></label>
+                      {p.plan && p.plan.length > 0 ? (
+                        <div className="sm:col-span-2">
+                          <div className="mb-0.5 text-[11px]" style={{ color: "var(--muted)" }}>{p.format === "carousel" ? "Slide" : p.format === "reel" ? "Beat" : p.format === "story" ? "Frame" : "Step"} plan</div>
+                          <div className="space-y-1">
+                            {p.plan.map((s, k) => (
+                              <div key={k} className="flex gap-1.5 text-[11px]">
+                                <span className="shrink-0 rounded px-1.5 font-semibold" style={{ background: "var(--panel)", border: "1px solid var(--line-2)", color: "var(--accent-ink)" }}>{k + 1} · {s.purpose}</span>
+                                <span className="min-w-0 truncate" style={{ color: "var(--muted)" }}>{s.note}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
