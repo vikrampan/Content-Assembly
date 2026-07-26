@@ -117,7 +117,8 @@ export default async function ContentDetailPage({
   const formatWhy = decision?.rationale ?? item.format_rationale;
 
   // The strategic brief that cascaded from the Strategy desk.
-  const sb = (item.brief ?? {}) as { angle?: string; key_message?: string; creative_direction?: string; cta?: string; platform?: string };
+  const sb = (item.brief ?? {}) as { angle?: string; key_message?: string; creative_direction?: string; cta?: string; platform?: string; plan?: { purpose: string; note: string }[] };
+  const planNoun = item.format === "carousel" ? "Slide" : item.format === "reel" ? "Beat" : item.format === "story" ? "Frame" : "Step";
 
   const brief = (
     <section className="card p-4">
@@ -138,6 +139,19 @@ export default async function ContentDetailPage({
           {sb.key_message ? <div><div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Key message</div><div className="text-xs leading-relaxed">{sb.key_message}</div></div> : null}
           {sb.creative_direction ? <div><div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>Creative direction</div><div className="text-xs leading-relaxed">{sb.creative_direction}</div></div> : null}
           {sb.cta ? <div><div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>CTA</div><div className="text-xs leading-relaxed">{sb.cta}</div></div> : null}
+          {sb.plan && sb.plan.length > 0 ? (
+            <div>
+              <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--faint)" }}>{planNoun} plan</div>
+              <div className="mt-1 space-y-1">
+                {sb.plan.map((s, i) => (
+                  <div key={i} className="flex gap-1.5 text-xs">
+                    <span className="shrink-0 rounded px-1.5 text-[10px] font-semibold" style={{ background: "var(--panel-2)", color: "var(--accent-ink)" }}>{i + 1} · {s.purpose}</span>
+                    {s.note ? <span style={{ color: "var(--muted)" }}>{s.note}</span> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
