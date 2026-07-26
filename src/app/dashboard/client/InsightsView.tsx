@@ -1,6 +1,5 @@
 import type { ContentItem, PostMetric } from "@/lib/types";
 import { ClientAnalytics } from "../ClientAnalytics";
-import { AiCard } from "./AiCard";
 import { EmptyState } from "@/components/ui/States";
 import { accentOf, brandFonts, BrandStyle, clientWorkspace, SectionHeader } from "./shared";
 
@@ -48,9 +47,6 @@ export async function InsightsView() {
     <div className="space-y-6">
       <BrandStyle faces={faces} />
       <SectionHeader title="Analytics" subtitle="How your posts are performing." family={headlineFamily} />
-
-      {/* AI: turn the numbers into plain English + next steps */}
-      <AiCard kind="insights" title="Explain my results" subtitle="What worked, why, and what to do next" cta="✦ Explain" />
 
       {/* Overall */}
       <ClientAnalytics metrics={metrics} posts={posts} accent={accent} />

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { navFor, userFunction } from "@/lib/mendly/access";
 import { Sidebar } from "@/components/Sidebar";
 import { CommandPalette } from "@/components/CommandPalette";
-import { Concierge } from "./client/Concierge";
+import { Assistant } from "./client/Assistant";
 import { ClientTour } from "./client/ClientTour";
 
 const FN_LABEL: Record<string, string> = {
@@ -41,9 +41,11 @@ export default async function DashboardLayout({
   // The sidebar subtitle: clients see their brand; staff see their desk label.
   let subtitle = FN_LABEL[fn] ?? "Workspace";
   let logoUrl: string | null = null;
+  let clientWsId: string | null = null;
   if (fn === "client") {
     const supabase = await createClient();
-    const { data: ws } = await supabase.from("workspaces").select("name,logo_path").limit(1).maybeSingle<{ name: string; logo_path: string | null }>();
+    const { data: ws } = await supabase.from("workspaces").select("id,name,logo_path").limit(1).maybeSingle<{ id: string; name: string; logo_path: string | null }>();
+    if (ws?.id) clientWsId = ws.id;
     if (ws?.name) subtitle = ws.name;
     if (ws?.logo_path) {
       const { data: signed } = await supabase.storage.from("assets").createSignedUrl(ws.logo_path, 3600);
@@ -78,7 +80,7 @@ export default async function DashboardLayout({
         </div>
       </main>
       {fn !== "client" ? <CommandPalette /> : null}
-      {fn === "client" ? <><Concierge brandName={subtitle} /><ClientTour brandName={subtitle} /></> : null}
+      {fn === "client" && clientWsId ? <><Assistant workspaceId={clientWsId} brandName={subtitle} /><ClientTour brandName={subtitle} /></> : null}
     </div>
   );
 }

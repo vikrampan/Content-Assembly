@@ -2,7 +2,7 @@ import type { Asset } from "@/lib/types";
 import { accentOf, brandFonts, BrandStyle, clientWorkspace, logoUrlOf, SectionHeader } from "./shared";
 import { BrandBookForm } from "../brands/[id]/BrandBookForm";
 import { BrandBookSections } from "../brands/[id]/BrandBookSections";
-import { BrandBookCopilot } from "./BrandBookCopilot";
+import { BrandCompleteBanner } from "./BrandCompleteBanner";
 
 function Swatch({ hex, label }: { hex: string; label: string }) {
   const clean = hex.replace(/^#/, "");
@@ -73,8 +73,8 @@ export async function BrandBookView() {
       <BrandStyle faces={faces} />
       <SectionHeader title="Brand Book" subtitle="See and edit your brand — every change applies everywhere your content is made, instantly." family={headlineFamily} />
 
-      {/* AI copilot — fill in / improve the brand book by asking (propose → apply) */}
-      <BrandBookCopilot workspaceId={ws.id} filled={filled} total={total} />
+      {/* Completeness nudge — opens the one Assistant, primed to fill the gaps */}
+      <BrandCompleteBanner filled={filled} total={total} />
 
 
       {ws.brand_status !== "locked" ? (

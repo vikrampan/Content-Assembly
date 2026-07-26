@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { CalendarApproval, ContentItem } from "@/lib/types";
 import { ClientPipeline } from "../ClientPipeline";
-import { AiCard } from "./AiCard";
 import { accentOf, brandFonts, BrandStyle, clientWorkspace, logoUrlOf } from "./shared";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -83,9 +82,6 @@ export async function HomeView() {
       ) : (
         <div className="card p-5 text-sm" style={{ color: "var(--muted)" }}>You&apos;re all caught up — nothing needs you right now. ✓</div>
       )}
-
-      {/* AI: a friendly status digest, on demand */}
-      <AiCard kind="digest" title="Your week at a glance" subtitle="Let AI sum up where things stand" cta="✦ Summarize" />
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
