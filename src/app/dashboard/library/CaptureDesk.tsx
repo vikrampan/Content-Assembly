@@ -86,17 +86,27 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
     setBusy(true);
     const supabase = createClient();
     try {
+      const fresh: AssetView[] = [];
       for (const file of Array.from(files)) {
         const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${workspaceId}/${crypto.randomUUID()}-${safe}`;
         const { error: upErr } = await supabase.storage.from("assets").upload(path, file, { upsert: false });
         if (upErr) throw upErr;
-        const { error: rowErr } = await supabase.from("assets").insert({
+        // Return the created row so we can show it immediately (no refresh needed).
+        const { data: row, error: rowErr } = await supabase.from("assets").insert({
           workspace_id: workspaceId, storage_path: path, kind: "raw", label: file.name,
           collection: uploadColl.trim() || null,
-        });
+        }).select("id").single();
         if (rowErr) throw rowErr;
+        const { data: signed } = await supabase.storage.from("assets").createSignedUrl(path, 3600);
+        fresh.push({
+          id: (row as { id: string }).id, workspace_id: workspaceId, storage_path: path, kind: "raw",
+          url: signed?.signedUrl ?? null, name: file.name, tags: [], rating: 0, select_status: "none",
+          collection: uploadColl.trim() || null, note: null, captured_at: null, rights: null, prompt: null, gen_status: "ready",
+        });
       }
+      // Prepend the new assets so they appear then and there.
+      if (fresh.length) setItems((cur) => [...fresh, ...cur]);
       if (fileRef.current) fileRef.current.value = "";
       start(() => router.refresh());
     } catch (e) {
