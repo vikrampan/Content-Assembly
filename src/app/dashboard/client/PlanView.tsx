@@ -6,14 +6,15 @@ import { accentOf, brandFonts, BrandStyle, clientWorkspace, creativesFor, Sectio
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-export async function PlanView() {
+export async function PlanView({ month }: { month?: string }) {
   const { supabase, ws } = await clientWorkspace();
   if (!ws) return <div className="card p-10 text-center text-sm" style={{ color: "var(--muted)" }}>Your workspace isn&apos;t set up yet.</div>;
   const accent = accentOf(ws);
   const { faces, headlineFamily } = await brandFonts(supabase, ws);
 
   const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
+  let y = now.getFullYear(), m = now.getMonth();
+  if (month && /^\d{4}-\d{2}$/.test(month)) { const [yy, mm] = month.split("-").map(Number); y = yy; m = mm - 1; }
   const monthStart = new Date(y, m, 1), monthEnd = new Date(y, m + 1, 0);
 
   const [{ data: calRaw }, { data: apprRaw }] = await Promise.all([
@@ -51,11 +52,7 @@ export async function PlanView() {
         <SectionHeader title={`${MONTHS[m]} ${y}`} subtitle="Your plan for the month — tap any day to see the post and give feedback." family={headlineFamily} />
         <CalendarApprovalControl workspaceId={ws.id} month={iso(monthStart)} status={approval?.status ?? "pending"} note={approval?.note ?? null} />
       </div>
-      {calendar.length === 0 ? (
-        <div className="card p-10 text-center text-sm" style={{ color: "var(--muted)" }}>Your team is preparing this month&apos;s plan.</div>
-      ) : (
-        <CalendarView year={y} month={m} posts={posts} accent={accent} brandName={ws.name} />
-      )}
+      <CalendarView year={y} month={m} posts={posts} accent={accent} brandName={ws.name} />
     </div>
   );
 }

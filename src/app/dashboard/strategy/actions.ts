@@ -315,10 +315,11 @@ export async function commitMonthPlan(input: {
     type: "calendar",
     title: `Your ${monthName} content plan is ready`,
     body: `Your team has drafted ${rows.length} post${rows.length === 1 ? "" : "s"} for ${monthName}. Open your portal to review the calendar and share any feedback.`,
-    link: "/dashboard/calendar",
+    link: `/dashboard/plan?m=${input.year}-${String(input.month + 1).padStart(2, "0")}`,
   });
 
   revalidatePath("/dashboard/calendar");
+  revalidatePath("/dashboard/plan");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/strategy");
   return { ok: true, created: rows.length };

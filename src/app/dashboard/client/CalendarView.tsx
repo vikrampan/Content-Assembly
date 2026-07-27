@@ -162,8 +162,25 @@ export function CalendarView({ year, month, posts, accent, brandName }: { year: 
     });
   }
 
+  function go(delta: number) {
+    const d = new Date(year, month + delta, 1);
+    router.push(`?m=${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+
   return (
     <>
+      {/* Month navigation */}
+      <div className="mb-3 flex items-center gap-3">
+        <button type="button" onClick={() => go(-1)} className="rounded-lg px-2.5 py-1.5 text-sm transition hover:brightness-95" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>‹</button>
+        <div className="min-w-[150px] text-center text-sm font-semibold">{MONTHS[month]} {year}</div>
+        <button type="button" onClick={() => go(1)} className="rounded-lg px-2.5 py-1.5 text-sm transition hover:brightness-95" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>›</button>
+        {posts.length > 0 ? <span className="ml-auto text-xs" style={{ color: "var(--faint)" }}>{posts.length} post{posts.length !== 1 ? "s" : ""}</span> : null}
+      </div>
+
+      {posts.length === 0 ? (
+        <div className="card p-8 text-center text-sm" style={{ color: "var(--muted)" }}>Nothing planned for {MONTHS[month]} yet — use ‹ › to check another month.</div>
+      ) : null}
+
       <div className="card overflow-hidden">
         <div className="grid grid-cols-7">
           {DOW.map((d) => (
