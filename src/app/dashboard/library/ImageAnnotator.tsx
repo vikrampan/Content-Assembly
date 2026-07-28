@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { upscaleAsset } from "./actions";
 
 interface Pin { id: string; x: number; y: number; note: string; resolved: boolean }
 
@@ -35,6 +36,17 @@ export function ImageAnnotator({ assetId, workspaceId, url, name, onClose, onSav
 }) {
   const [imgUrl, setImgUrl] = useState(url);
   const [editing, setEditing] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
+
+  async function enhance() {
+    setEnhancing(true);
+    try {
+      const res = await upscaleAsset(assetId);
+      if ("error" in res) { window.alert(res.error); return; }
+      setImgUrl(`${res.url}${res.url.includes("?") ? "&" : "?"}v=${Date.now()}`);
+      onSaved?.(res.url);
+    } finally { setEnhancing(false); }
+  }
   const [pins, setPins] = useState<Pin[]>([]);
   const [adding, setAdding] = useState(false);
   const [active, setActive] = useState<string | null>(null);
@@ -136,6 +148,13 @@ export function ImageAnnotator({ assetId, workspaceId, url, name, onClose, onSav
               className="rounded-full px-4 py-2 text-sm font-semibold shadow-lg transition hover:brightness-95 disabled:opacity-60"
               style={{ background: "#fff", color: "#1c1c1c" }}>
               {editing ? "Opening…" : "✦ Edit in Adobe Express"}
+            </button>
+          ) : null}
+          {!adding ? (
+            <button type="button" onClick={enhance} disabled={enhancing}
+              className="rounded-full px-4 py-2 text-sm font-semibold shadow-lg transition hover:brightness-95 disabled:opacity-60"
+              style={{ background: "#fff", color: "#1c1c1c" }}>
+              {enhancing ? "Enhancing…" : "✧ Enhance to HD"}
             </button>
           ) : null}
         </div>

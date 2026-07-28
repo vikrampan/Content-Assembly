@@ -9,10 +9,48 @@ import type { Workspace } from "@/lib/types";
 import { hasAnthropic } from "@/lib/ai/strategist";
 import {
   buildMediaPrompt, createPrediction, getPrediction, hasReplicate, imageInput,
-  outputUrl, pollPrediction, videoInput,
+  outputUrl, pollPrediction, videoInput, upscaleImage,
 } from "@/lib/ai/mediaGen";
 
 type Result<T = unknown> = ({ ok: true } & T) | { error: string };
+
+// Hard monthly HD-upscale cap per brand (env-overridable) so costs can't run away.
+const UPSCALE_MONTHLY_CAP = Number(process.env.UPSCALE_MONTHLY_CAP || 500);
+const UPSCALE_COST_USD = 0.006; // approx per Real-ESRGAN run, for the meter
+
+/** AI super-resolution: enhance a pixelated photo to HD, saved back on the asset. */
+export async function upscaleAsset(assetId: string): Promise<Result<{ url: string }>> {
+  const session = await requireCapture();
+  if (!hasReplicate()) return { error: "HD enhance needs REPLICATE_API_TOKEN on the server." };
+  const supabase = await createClient();
+  const { data: asset } = await supabase.from("assets").select("id, workspace_id, storage_path").eq("id", assetId)
+    .single<{ id: string; workspace_id: string; storage_path: string }>();
+  if (!asset) return { error: "Photo not found." };
+
+  // Monthly cap per brand.
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const { count } = await supabase.from("ai_usage").select("id", { count: "exact", head: true })
+    .eq("workspace_id", asset.workspace_id).eq("purpose", "upscale").gte("created_at", monthStart);
+  if ((count ?? 0) >= UPSCALE_MONTHLY_CAP) return { error: `This brand hit its monthly HD limit (${UPSCALE_MONTHLY_CAP}). An admin can raise it.` };
+
+  const { data: signed } = await supabase.storage.from("assets").createSignedUrl(asset.storage_path, 3600);
+  if (!signed?.signedUrl) return { error: "Couldn't read the photo." };
+
+  try {
+    const outUrl = await upscaleImage(signed.signedUrl, 4);
+    const { path } = await storeRemote(supabase, asset.workspace_id, outUrl);
+    await supabase.from("assets").update({ storage_path: path }).eq("id", assetId);
+    await supabase.from("ai_usage").insert({
+      user_id: session.userId, workspace_id: asset.workspace_id, purpose: "upscale",
+      provider: "replicate", model: "real-esrgan", input_tokens: 0, output_tokens: 0, cost_usd: UPSCALE_COST_USD,
+    });
+    const { data: fresh } = await supabase.storage.from("assets").createSignedUrl(path, 3600);
+    revalidatePath("/dashboard/library");
+    return { ok: true, url: fresh?.signedUrl ?? "" };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Enhance failed — try again." };
+  }
+}
 
 async function requireCapture() {
   const session = await requireSession();

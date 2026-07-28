@@ -18,6 +18,8 @@ export function hasReplicate(): boolean {
 // Model IDs are env-overridable so a deprecated model never breaks the desk.
 const IMAGE_MODEL = process.env.REPLICATE_IMAGE_MODEL || "black-forest-labs/flux-1.1-pro";
 const VIDEO_MODEL = process.env.REPLICATE_VIDEO_MODEL || "minimax/video-01";
+// Cheap super-resolution (~$0.005/run). Env-overridable so a deprecated model never breaks it.
+const UPSCALE_MODEL = process.env.REPLICATE_UPSCALE_MODEL || "nightmareai/real-esrgan";
 
 // ---- Layer 1: on-brand prompt (Claude) ---------------------------------
 export interface PromptResult {
@@ -96,6 +98,20 @@ export async function getPrediction(id: string): Promise<Prediction> {
   const res = await replicate(`/predictions/${id}`);
   if (!res.ok) throw new Error(`Replicate ${res.status}: ${await res.text()}`);
   return (await res.json()) as Prediction;
+}
+
+/** Super-resolution upscale of an image URL → returns the hi-res output URL. */
+export async function upscaleImage(imageUrl: string, scale = 4, faceEnhance = false): Promise<string> {
+  const res = await replicate(`/models/${UPSCALE_MODEL}/predictions`, {
+    method: "POST",
+    headers: { Prefer: "wait" }, // hold the request open until it finishes (fast for Real-ESRGAN)
+    body: JSON.stringify({ input: { image: imageUrl, scale, face_enhance: faceEnhance } }),
+  });
+  if (!res.ok) throw new Error(`Replicate ${res.status}: ${await res.text()}`);
+  let pred = (await res.json()) as Prediction;
+  if (pred.status !== "succeeded") pred = await pollPrediction(pred.id);
+  if (pred.status !== "succeeded" || !pred.output) throw new Error(pred.error || "Upscale failed.");
+  return Array.isArray(pred.output) ? pred.output[0] : pred.output;
 }
 
 /** Poll a prediction until it's terminal or the timeout elapses. */
