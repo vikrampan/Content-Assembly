@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { CaptureBrief, Workspace } from "@/lib/types";
 import { AiStudio } from "./AiStudio";
 import { ShotLists } from "./ShotLists";
+import { ImageAnnotator } from "./ImageAnnotator";
 import { checkGeneration, deleteLibraryAsset } from "./actions";
 
 export interface AssetView {
@@ -423,16 +424,20 @@ export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { 
         </div>
       ) : null}
 
-      {/* Lightbox */}
+      {/* Lightbox — images get pin-a-note annotation; video plays plainly */}
       {lightbox ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,.8)" }} onClick={() => setLightbox(null)}>
-          {lightbox.url && isVid(lightbox) ? (
-            <video src={lightbox.url} controls autoPlay className="max-h-full max-w-full rounded-lg" onClick={(e) => e.stopPropagation()} />
-          ) : lightbox.url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={lightbox.url} alt={lightbox.name} className="max-h-full max-w-full rounded-lg" onClick={(e) => e.stopPropagation()} />
-          ) : null}
-        </div>
+        lightbox.url && isImg(lightbox) ? (
+          <ImageAnnotator assetId={lightbox.id} workspaceId={workspaceId} url={lightbox.url} name={lightbox.name} onClose={() => setLightbox(null)} />
+        ) : (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,.8)" }} onClick={() => setLightbox(null)}>
+            {lightbox.url && isVid(lightbox) ? (
+              <video src={lightbox.url} controls autoPlay className="max-h-full max-w-full rounded-lg" onClick={(e) => e.stopPropagation()} />
+            ) : lightbox.url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={lightbox.url} alt={lightbox.name} className="max-h-full max-w-full rounded-lg" onClick={(e) => e.stopPropagation()} />
+            ) : null}
+          </div>
+        )
       ) : null}
     </div>
   );
