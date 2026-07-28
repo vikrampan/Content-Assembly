@@ -42,6 +42,7 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
   const [kindF, setKindF] = useState("all");
   const [selF, setSelF] = useState("all");
   const [collF, setCollF] = useState("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [uploadColl, setUploadColl] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -53,7 +54,12 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
   const [, start] = useTransition();
 
   const mine = useMemo(() => items.filter((a) => a.workspace_id === workspaceId), [items, workspaceId]);
-  const collections = useMemo(() => Array.from(new Set(mine.map((a) => a.collection).filter(Boolean))) as string[], [mine]);
+  const collections = useMemo(() => Array.from(new Set(mine.map((a) => a.collection).filter(Boolean))).sort() as string[], [mine]);
+  const folderCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of mine) { const k = a.collection ?? "__none__"; m.set(k, (m.get(k) ?? 0) + 1); }
+    return m;
+  }, [mine]);
 
   const filtered = useMemo(() => mine.filter((a) => {
     if (kindF === "generated" && a.kind !== "generated") return false;
@@ -63,7 +69,7 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
     if (selF === "pick" && a.select_status !== "pick") return false;
     if (selF === "reject" && a.select_status !== "reject") return false;
     if (selF === "rated" && a.rating === 0) return false;
-    if (collF !== "all" && a.collection !== collF) return false;
+    if (collF === "__none__" ? a.collection != null : collF !== "all" && a.collection !== collF) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       if (!a.name.toLowerCase().includes(q) && !(a.tags ?? []).some((t) => t.toLowerCase().includes(q)) && !(a.collection ?? "").toLowerCase().includes(q)) return false;
@@ -71,9 +77,49 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
     return true;
   }), [mine, kindF, selF, collF, search]);
 
+  // Only these are real DB columns — `name`/`url`/`id` are view-only, so sending
+  // them made the whole update fail (that's why renames didn't stick).
+  const DB_COLS = new Set(["label", "rating", "select_status", "collection", "tags", "note", "captured_at", "rights"]);
   async function patch(id: string, fields: Partial<AssetView> & Record<string, unknown>) {
     setItems((list) => list.map((a) => (a.id === id ? { ...a, ...fields } as AssetView : a)));
-    await createClient().from("assets").update(fields).eq("id", id);
+    const dbFields = Object.fromEntries(Object.entries(fields).filter(([k]) => DB_COLS.has(k)));
+    if (Object.keys(dbFields).length) await createClient().from("assets").update(dbFields).eq("id", id);
+  }
+
+  // --- Folders (collections) + bulk selection -----------------------------
+  async function moveTo(ids: string[], folder: string | null) {
+    setItems((list) => list.map((a) => (ids.includes(a.id) ? { ...a, collection: folder } : a)));
+    setSelected(new Set());
+    await createClient().from("assets").update({ collection: folder }).in("id", ids);
+  }
+  async function renameFolder(oldName: string) {
+    const nn = window.prompt(`Rename folder "${oldName}" to:`, oldName)?.trim();
+    if (!nn || nn === oldName) return;
+    setItems((list) => list.map((a) => (a.collection === oldName ? { ...a, collection: nn } : a)));
+    if (collF === oldName) setCollF(nn);
+    await createClient().from("assets").update({ collection: nn }).eq("workspace_id", workspaceId).eq("collection", oldName);
+  }
+  async function deleteFolder(name: string) {
+    if (!window.confirm(`Delete folder "${name}"? Its files move to Uncategorized (nothing is deleted).`)) return;
+    setItems((list) => list.map((a) => (a.collection === name ? { ...a, collection: null } : a)));
+    if (collF === name) setCollF("all");
+    await createClient().from("assets").update({ collection: null }).eq("workspace_id", workspaceId).eq("collection", name);
+  }
+  function newFolderFromSelection() {
+    const nn = window.prompt("New folder name:")?.trim();
+    if (!nn) return;
+    moveTo([...selected], nn);
+  }
+  async function bulkDelete() {
+    const ids = [...selected];
+    if (!ids.length || !window.confirm(`Delete ${ids.length} file${ids.length > 1 ? "s" : ""}? This can't be undone.`)) return;
+    setItems((list) => list.filter((a) => !ids.includes(a.id)));
+    setSelected(new Set());
+    for (const id of ids) await deleteLibraryAsset(id);
+    router.refresh();
+  }
+  function toggleSel(id: string) {
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
   async function onFiles(files: FileList | null) {
@@ -196,13 +242,46 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
               <select value={selF} onChange={(e) => setSelF(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm outline-none" style={inputStyle}>
                 <option value="all">All</option><option value="pick">Picks ✓</option><option value="reject">Rejects</option><option value="rated">Rated</option>
               </select>
-              {collections.length > 0 ? (
-                <select value={collF} onChange={(e) => setCollF(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm outline-none" style={inputStyle}>
-                  <option value="all">All collections</option>
-                  {collections.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              ) : null}
               <span className="ml-auto text-xs" style={{ color: "var(--faint)" }}>{filtered.length} of {mine.length}</span>
+            </div>
+          ) : null}
+
+          {/* Folders */}
+          {mine.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {([["all", `All (${mine.length})`], ["__none__", `Uncategorized (${folderCount.get("__none__") ?? 0})`]] as [string, string][]).map(([k, label]) => (
+                (k === "__none__" && !(folderCount.get("__none__") ?? 0)) ? null :
+                <button key={k} type="button" onClick={() => setCollF(k)} className="rounded-full px-3 py-1.5 text-xs font-medium transition"
+                  style={collF === k ? { background: "var(--accent)", color: "#fff" } : { background: "var(--panel-2)", border: "1px solid var(--line-2)", color: "var(--ink)" }}>
+                  {k === "__none__" ? "📂 " : "📁 "}{label}
+                </button>
+              ))}
+              {collections.map((c) => (
+                <span key={c} className="inline-flex items-center overflow-hidden rounded-full" style={collF === c ? { background: "var(--accent)" } : { background: "var(--panel-2)", border: "1px solid var(--line-2)" }}>
+                  <button type="button" onClick={() => setCollF(c)} className="px-3 py-1.5 text-xs font-medium" style={{ color: collF === c ? "#fff" : "var(--ink)" }}>📁 {c} ({folderCount.get(c) ?? 0})</button>
+                  {collF === c ? (
+                    <>
+                      <button type="button" onClick={() => renameFolder(c)} title="Rename folder" className="px-1.5 text-xs text-white/80 hover:text-white">✎</button>
+                      <button type="button" onClick={() => deleteFolder(c)} title="Delete folder" className="pr-2 pl-1 text-xs text-white/80 hover:text-white">🗑</button>
+                    </>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Bulk action toolbar */}
+          {selected.size > 0 ? (
+            <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl p-2.5" style={{ background: "var(--accent)", color: "#fff", boxShadow: "var(--shadow)" }}>
+              <span className="text-sm font-semibold">{selected.size} selected</span>
+              <select onChange={(e) => { if (e.target.value) { moveTo([...selected], e.target.value === "__none__" ? null : e.target.value); e.target.value = ""; } }} defaultValue="" className="rounded-lg px-2.5 py-1.5 text-xs" style={{ background: "var(--panel)", color: "var(--ink)", border: "none" }}>
+                <option value="" disabled>Move to…</option>
+                <option value="__none__">Uncategorized</option>
+                {collections.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button type="button" onClick={newFolderFromSelection} className="rounded-lg px-2.5 py-1.5 text-xs font-semibold" style={{ background: "rgba(255,255,255,.2)" }}>+ New folder</button>
+              <button type="button" onClick={bulkDelete} className="rounded-lg px-2.5 py-1.5 text-xs font-semibold" style={{ background: "rgba(255,255,255,.2)" }}>Delete</button>
+              <button type="button" onClick={() => setSelected(new Set())} className="ml-auto text-xs font-semibold underline">Clear</button>
             </div>
           ) : null}
 
@@ -215,8 +294,13 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {filtered.map((a) => (
-                <div key={a.id} className="group overflow-hidden rounded-xl transition hover:shadow-md" style={{ border: `1px solid ${a.select_status === "pick" ? "var(--good)" : a.select_status === "reject" ? "var(--danger)" : "var(--line)"}`, background: "var(--panel)" }}>
+                <div key={a.id} className="group overflow-hidden rounded-xl transition hover:shadow-md" style={{ border: `2px solid ${selected.has(a.id) ? "var(--accent)" : a.select_status === "pick" ? "var(--good)" : a.select_status === "reject" ? "var(--danger)" : "var(--line)"}`, background: "var(--panel)" }}>
                   <div className="relative flex aspect-square cursor-pointer items-center justify-center" style={{ background: "var(--panel-2)" }} onClick={() => (a.gen_status === "ready" ? setLightbox(a) : null)}>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); toggleSel(a.id); }} title="Select"
+                      className={`absolute left-1.5 top-1.5 z-10 grid h-5 w-5 place-items-center rounded-md text-[11px] font-bold transition ${selected.has(a.id) ? "" : "opacity-0 group-hover:opacity-100"}`}
+                      style={selected.has(a.id) ? { background: "var(--accent)", color: "#fff" } : { background: "rgba(255,255,255,.85)", color: "var(--ink)", border: "1px solid var(--line-2)" }}>
+                      {selected.has(a.id) ? "✓" : ""}
+                    </button>
                     {a.gen_status === "pending" ? (
                       <div className="flex flex-col items-center gap-2 text-xs" style={{ color: "var(--muted)" }}>
                         <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />Rendering…
@@ -229,7 +313,7 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
                     ) : (
                       <span className="text-3xl" style={{ color: "var(--faint)" }}>{isAud(a) ? "♪" : "▤"}</span>
                     )}
-                    {a.kind === "generated" ? <span className="pill pending absolute left-1.5 top-1.5">AI</span> : null}
+                    {a.kind === "generated" ? <span className="pill pending absolute bottom-1.5 left-1.5">AI</span> : null}
                     {a.select_status === "pick" ? <span className="pill approved absolute right-1.5 top-1.5">Pick</span> : null}
                   </div>
                   <div className="space-y-1.5 p-2">
