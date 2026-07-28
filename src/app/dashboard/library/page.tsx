@@ -9,15 +9,17 @@ export default async function LibraryPage() {
   await requireAccess("library");
 
   const supabase = await createClient();
-  const [{ data: ws }, { data: assetRows }, { data: briefRows }] = await Promise.all([
+  const [{ data: ws }, { data: assetRows }, { data: briefRows }, { data: noteRows }] = await Promise.all([
     supabase.from("workspaces").select("*").order("name"),
     // Library media only (not per-content deliverables, not brand kit assets).
     supabase.from("assets").select("*").is("content_id", null).in("kind", ["raw", "generated", "final"]).order("created_at", { ascending: false }),
     supabase.from("capture_briefs").select("*").order("created_at", { ascending: false }),
+    supabase.from("folder_notes").select("workspace_id, folder, note"),
   ]);
   const workspaces = (ws as Workspace[]) ?? [];
   const assets = (assetRows as Asset[]) ?? [];
   const briefs = (briefRows as CaptureBrief[]) ?? [];
+  const folderNotes = (noteRows as { workspace_id: string; folder: string; note: string | null }[]) ?? [];
 
   // Signed URLs (skip pending generations that have no stored file yet).
   const views: AssetView[] = await Promise.all(
@@ -50,7 +52,7 @@ export default async function LibraryPage() {
           Create a brand first, then capture or generate its media.
         </div>
       ) : (
-        <CaptureDesk workspaces={workspaces} assets={views} briefs={briefs} />
+        <CaptureDesk workspaces={workspaces} assets={views} briefs={briefs} folderNotes={folderNotes} />
       )}
     </div>
   );

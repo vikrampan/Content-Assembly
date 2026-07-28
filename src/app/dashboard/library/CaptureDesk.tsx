@@ -34,7 +34,7 @@ function Stars({ value, onSet }: { value: number; onSet: (n: number) => void }) 
   );
 }
 
-export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Workspace[]; assets: AssetView[]; briefs: CaptureBrief[] }) {
+export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { workspaces: Workspace[]; assets: AssetView[]; briefs: CaptureBrief[]; folderNotes?: { workspace_id: string; folder: string; note: string | null }[] }) {
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
   const [tab, setTab] = useState<"library" | "generate" | "shots">("library");
   const [items, setItems] = useState(assets);
@@ -43,6 +43,11 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
   const [selF, setSelF] = useState("all");
   const [collF, setCollF] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [notes, setNotes] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const n of folderNotes) m[`${n.workspace_id}::${n.folder}`] = n.note ?? "";
+    return m;
+  });
   const [uploadColl, setUploadColl] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -96,14 +101,24 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
     const nn = window.prompt(`Rename folder "${oldName}" to:`, oldName)?.trim();
     if (!nn || nn === oldName) return;
     setItems((list) => list.map((a) => (a.collection === oldName ? { ...a, collection: nn } : a)));
+    setNotes((m) => { const c = { ...m }; const v = c[`${workspaceId}::${oldName}`]; if (v !== undefined) { c[`${workspaceId}::${nn}`] = v; delete c[`${workspaceId}::${oldName}`]; } return c; });
     if (collF === oldName) setCollF(nn);
-    await createClient().from("assets").update({ collection: nn }).eq("workspace_id", workspaceId).eq("collection", oldName);
+    const db = createClient();
+    await db.from("assets").update({ collection: nn }).eq("workspace_id", workspaceId).eq("collection", oldName);
+    await db.from("folder_notes").update({ folder: nn }).eq("workspace_id", workspaceId).eq("folder", oldName);
   }
   async function deleteFolder(name: string) {
     if (!window.confirm(`Delete folder "${name}"? Its files move to Uncategorized (nothing is deleted).`)) return;
     setItems((list) => list.map((a) => (a.collection === name ? { ...a, collection: null } : a)));
+    setNotes((m) => { const c = { ...m }; delete c[`${workspaceId}::${name}`]; return c; });
     if (collF === name) setCollF("all");
-    await createClient().from("assets").update({ collection: null }).eq("workspace_id", workspaceId).eq("collection", name);
+    const db = createClient();
+    await db.from("assets").update({ collection: null }).eq("workspace_id", workspaceId).eq("collection", name);
+    await db.from("folder_notes").delete().eq("workspace_id", workspaceId).eq("folder", name);
+  }
+  async function saveNote(folder: string, note: string) {
+    setNotes((m) => ({ ...m, [`${workspaceId}::${folder}`]: note }));
+    await createClient().from("folder_notes").upsert({ workspace_id: workspaceId, folder, note: note.trim() || null, updated_at: new Date().toISOString() }, { onConflict: "workspace_id,folder" });
   }
   function newFolderFromSelection() {
     const nn = window.prompt("New folder name:")?.trim();
@@ -267,6 +282,25 @@ export function CaptureDesk({ workspaces, assets, briefs }: { workspaces: Worksp
                   ) : null}
                 </span>
               ))}
+            </div>
+          ) : null}
+
+          {/* Note for the editor — per folder */}
+          {collF !== "all" && collF !== "__none__" ? (
+            <div className="rounded-xl p-3.5" style={{ background: "var(--accent-soft)", border: "1px solid var(--line)" }}>
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="text-sm font-semibold" style={{ color: "var(--accent-ink)" }}>📝 Note for the editor · {collF}</span>
+                <span className="text-[11px]" style={{ color: "var(--faint)" }}>saved automatically</span>
+              </div>
+              <textarea
+                key={collF}
+                defaultValue={notes[`${workspaceId}::${collF}`] ?? ""}
+                onBlur={(e) => saveNote(collF, e.target.value)}
+                rows={3}
+                placeholder={"Points for whoever edits this folder…\n• use the red/black treatment\n• keep logo bottom-right\n• export 1080×1350"}
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                style={{ ...inputStyle, background: "var(--panel)" }}
+              />
             </div>
           ) : null}
 
