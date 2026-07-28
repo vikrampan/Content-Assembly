@@ -427,7 +427,8 @@ export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { 
       {/* Lightbox — images get pin-a-note annotation; video plays plainly */}
       {lightbox ? (
         lightbox.url && isImg(lightbox) ? (
-          <ImageAnnotator assetId={lightbox.id} workspaceId={workspaceId} url={lightbox.url} name={lightbox.name} onClose={() => setLightbox(null)} />
+          <ImageAnnotator assetId={lightbox.id} workspaceId={workspaceId} url={lightbox.url} name={lightbox.name} onClose={() => setLightbox(null)}
+            onSaved={(u) => setItems((list) => list.map((a) => (a.id === lightbox.id ? { ...a, url: u } : a)))} />
         ) : (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,.8)" }} onClick={() => setLightbox(null)}>
             {lightbox.url && isVid(lightbox) ? (

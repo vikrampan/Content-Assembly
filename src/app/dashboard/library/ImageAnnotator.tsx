@@ -9,9 +9,32 @@ import { createClient } from "@/lib/supabase/client";
 
 interface Pin { id: string; x: number; y: number; note: string; resolved: boolean }
 
-export function ImageAnnotator({ assetId, workspaceId, url, name, onClose }: {
-  assetId: string; workspaceId: string; url: string; name: string; onClose: () => void;
+const ADOBE_CLIENT_ID = process.env.NEXT_PUBLIC_ADOBE_CLIENT_ID;
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Load Adobe Express Embed SDK once (external script).
+let ccePromise: Promise<any> | null = null;
+function loadCCEverywhere(): Promise<any> {
+  if (typeof window === "undefined") return Promise.reject();
+  if ((window as any).CCEverywhere) return Promise.resolve((window as any).CCEverywhere);
+  if (!ccePromise) {
+    ccePromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cc-embed.adobe.com/sdk/v4/CCEverywhere.js";
+      s.onload = () => resolve((window as any).CCEverywhere);
+      s.onerror = reject;
+      document.body.appendChild(s);
+    });
+  }
+  return ccePromise;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+export function ImageAnnotator({ assetId, workspaceId, url, name, onClose, onSaved }: {
+  assetId: string; workspaceId: string; url: string; name: string; onClose: () => void; onSaved?: (url: string) => void;
 }) {
+  const [imgUrl, setImgUrl] = useState(url);
+  const [editing, setEditing] = useState(false);
   const [pins, setPins] = useState<Pin[]>([]);
   const [adding, setAdding] = useState(false);
   const [active, setActive] = useState<string | null>(null);
@@ -50,6 +73,40 @@ export function ImageAnnotator({ assetId, workspaceId, url, name, onClose }: {
     await createClient().from("asset_annotations").delete().eq("id", id);
   }
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  // Save the Express-edited image back as the asset's new file.
+  async function saveEdited(dataUrl: string) {
+    const blob = await (await fetch(dataUrl)).blob();
+    const path = `${workspaceId}/${crypto.randomUUID()}-edited.png`;
+    const sb = createClient();
+    const { error } = await sb.storage.from("assets").upload(path, blob, { upsert: false, contentType: blob.type || "image/png" });
+    if (error) { console.error("[express] upload", error); return; }
+    await sb.from("assets").update({ storage_path: path }).eq("id", assetId);
+    const { data } = await sb.storage.from("assets").createSignedUrl(path, 3600);
+    if (data?.signedUrl) { setImgUrl(data.signedUrl); onSaved?.(data.signedUrl); }
+  }
+  async function editInExpress() {
+    if (!ADOBE_CLIENT_ID) return;
+    setEditing(true);
+    try {
+      const CCEverywhere = await loadCCEverywhere();
+      const { module } = await CCEverywhere.initialize({ clientId: ADOBE_CLIENT_ID, appName: "Mendly OS" }, {});
+      const blob = await (await fetch(imgUrl)).blob();
+      module.editImage(
+        { asset: { type: "image", name, dataType: "blob", data: blob } },
+        { appVersion: "2", callbacks: {
+            onPublish: async (_intent: string, params: any) => { await saveEdited(params.asset[0].data); },
+            onCancel: () => {},
+            onError: (e: any) => console.error("[express]", e?.toString?.() ?? e),
+        } },
+        [{ id: "save", label: "Save to library", action: { target: "publish" }, style: { uiType: "button" } }],
+      );
+    } catch (e) {
+      console.error("[express] init failed", e);
+    } finally { setEditing(false); }
+  }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
   const open = pins.filter((p) => !p.resolved).length;
 
   return (
@@ -58,7 +115,7 @@ export function ImageAnnotator({ assetId, workspaceId, url, name, onClose }: {
       <div className="relative flex min-h-0 flex-1 items-center justify-center p-4">
         <div className="relative inline-block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img ref={imgRef} src={url} alt={name} onClick={addPin}
+          <img ref={imgRef} src={imgUrl} alt={name} onClick={addPin}
             className="max-h-[80vh] max-w-full rounded-lg" style={{ cursor: adding ? "crosshair" : "default" }} />
           {pins.map((p, i) => (
             <button key={p.id} type="button" onClick={() => setActive(p.id)}
@@ -68,11 +125,20 @@ export function ImageAnnotator({ assetId, workspaceId, url, name, onClose }: {
             </button>
           ))}
         </div>
-        <button type="button" onClick={() => setAdding((a) => !a)}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:brightness-105"
-          style={{ background: adding ? "var(--danger)" : "var(--accent)" }}>
-          {adding ? "Click the photo to place the note" : "📍 Add a note"}
-        </button>
+        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2">
+          <button type="button" onClick={() => setAdding((a) => !a)}
+            className="rounded-full px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:brightness-105"
+            style={{ background: adding ? "var(--danger)" : "var(--accent)" }}>
+            {adding ? "Click the photo to place the note" : "📍 Add a note"}
+          </button>
+          {ADOBE_CLIENT_ID && !adding ? (
+            <button type="button" onClick={editInExpress} disabled={editing}
+              className="rounded-full px-4 py-2 text-sm font-semibold shadow-lg transition hover:brightness-95 disabled:opacity-60"
+              style={{ background: "#fff", color: "#1c1c1c" }}>
+              {editing ? "Opening…" : "✦ Edit in Adobe Express"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {/* Notes panel */}
