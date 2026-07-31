@@ -56,6 +56,20 @@ export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { 
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<AssetView | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+
+  async function download(a: AssetView) {
+    if (!a.url) return;
+    try {
+      const res = await fetch(a.url);
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href; link.download = a.name || "download";
+      document.body.appendChild(link); link.click(); link.remove();
+      URL.revokeObjectURL(href);
+    } catch { window.open(a.url, "_blank"); }
+  }
   const router = useRouter();
   const [, start] = useTransition();
 
@@ -152,19 +166,23 @@ export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { 
       for (const file of Array.from(files)) {
         const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${workspaceId}/${crypto.randomUUID()}-${safe}`;
+        // Folder uploads carry a relative path — use the top folder as the collection.
+        const rel = (file as { webkitRelativePath?: string }).webkitRelativePath;
+        const folder = rel && rel.includes("/") ? rel.split("/")[0] : null;
+        const coll = folder || uploadColl.trim() || null;
         const { error: upErr } = await supabase.storage.from("assets").upload(path, file, { upsert: false });
         if (upErr) throw upErr;
         // Return the created row so we can show it immediately (no refresh needed).
         const { data: row, error: rowErr } = await supabase.from("assets").insert({
           workspace_id: workspaceId, storage_path: path, kind: "raw", label: file.name,
-          collection: uploadColl.trim() || null,
+          collection: coll,
         }).select("id").single();
         if (rowErr) throw rowErr;
         const { data: signed } = await supabase.storage.from("assets").createSignedUrl(path, 3600);
         fresh.push({
           id: (row as { id: string }).id, workspace_id: workspaceId, storage_path: path, kind: "raw",
           url: signed?.signedUrl ?? null, name: file.name, tags: [], rating: 0, select_status: "none",
-          collection: uploadColl.trim() || null, note: null, captured_at: null, rights: null, prompt: null, gen_status: "ready",
+          collection: coll, note: null, captured_at: null, rights: null, prompt: null, gen_status: "ready",
         });
       }
       // Prepend the new assets so they appear then and there.
@@ -218,6 +236,10 @@ export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { 
       ) : (
         <>
           <input ref={fileRef} type="file" multiple className="hidden" accept="image/*,video/*,audio/*" onChange={(e) => onFiles(e.target.files)} />
+          {/* Folder upload — webkitdirectory selects a whole folder; its name becomes the collection */}
+          <input ref={folderRef} type="file" multiple className="hidden"
+            // @ts-expect-error non-standard directory attributes
+            webkitdirectory="" directory="" onChange={(e) => onFiles(e.target.files)} />
 
           {/* Prominent drag-and-drop upload zone */}
           <div
@@ -238,7 +260,8 @@ export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { 
                 <span className="grid h-11 w-11 place-items-center rounded-xl text-xl text-white" style={{ background: "var(--accent)" }}>↑</span>
                 <span className="text-sm font-semibold">Drag photos, video &amp; audio here</span>
                 <span className="text-xs" style={{ color: "var(--muted)" }}>or click to browse · stored privately per brand</span>
-                <div className="mt-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <div className="mt-1 flex flex-wrap items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => !busy && folderRef.current?.click()} className="rounded-lg px-3 py-1.5 text-xs font-semibold" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>📁 Upload a folder</button>
                   <span className="text-[11px]" style={{ color: "var(--faint)" }}>Add to collection:</span>
                   <input value={uploadColl} onChange={(e) => setUploadColl(e.target.value)} placeholder="optional, e.g. Oct shoot" className="rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ ...inputStyle, width: 160 }} />
                 </div>
@@ -357,6 +380,7 @@ export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { 
                       <div className="flex gap-1">
                         <button type="button" onClick={() => patch(a.id, { select_status: a.select_status === "pick" ? "none" : "pick" })} title="Pick" className="text-xs" style={{ color: a.select_status === "pick" ? "var(--good)" : "var(--faint)" }}>✓</button>
                         <button type="button" onClick={() => patch(a.id, { select_status: a.select_status === "reject" ? "none" : "reject" })} title="Reject" className="text-xs" style={{ color: a.select_status === "reject" ? "var(--danger)" : "var(--faint)" }}>✕</button>
+                        {a.url ? <button type="button" onClick={() => download(a)} title="Download" className="text-xs" style={{ color: "var(--faint)" }}>⤓</button> : null}
                         <button type="button" onClick={() => setDrawerId(a.id)} title="Details" className="text-xs" style={{ color: "var(--faint)" }}>⋯</button>
                       </div>
                     </div>
@@ -417,6 +441,7 @@ export function CaptureDesk({ workspaces, assets, briefs, folderNotes = [] }: { 
               ) : null}
               <div className="flex gap-2 pt-1">
                 {drawer.url ? <a href={drawer.url} target="_blank" rel="noreferrer" className="rounded-lg px-3 py-2 text-sm font-medium" style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}>Open ↗</a> : null}
+                {drawer.url ? <button type="button" onClick={() => download(drawer)} className="rounded-lg px-3 py-2 text-sm font-semibold text-white" style={{ background: "var(--accent)" }}>⤓ Download</button> : null}
                 <button type="button" onClick={() => remove(drawer.id)} className="rounded-lg px-3 py-2 text-sm font-semibold" style={{ border: "1px solid var(--danger)", color: "var(--danger)" }}>Delete</button>
               </div>
             </div>
